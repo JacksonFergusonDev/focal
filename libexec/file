@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# DESC: Interactively selects a single file and copies its formatted contents.
+
+SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
+source "${SCRIPT_DIR}/../lib/core.sh"
+
+require_cmd "fzf"
+require_cmd "bat"
+require_cmd "fd"
+
+file=$(interactive_file_select "Select file: ")
+[ -z "$file" ] && exit 0
+
+formatted=$(format_file_for_llm "$file")
+
+output_and_copy "$formatted" "Copied $file to clipboard"

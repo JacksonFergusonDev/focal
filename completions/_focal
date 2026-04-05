@@ -1,0 +1,13 @@
+#compdef focal
+# shellcheck disable=all
+
+_focal() {
+  local -a cmds
+  cmds=("${(@f)$(focal --commands 2>/dev/null)}")
+
+  if (( CURRENT == 2 )); then
+    _describe -t commands 'focal commands' cmds
+  fi
+}
+
+_focal "$@"

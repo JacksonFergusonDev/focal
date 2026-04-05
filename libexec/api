@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# DESC: Extracts and copies an overview of Python classes and functions.
+
+SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
+source "${SCRIPT_DIR}/../lib/core.sh"
+require_cmd "rg"
+
+output_and_copy "$(rg '^(class|def) ')" "API overview copied to clipboard"

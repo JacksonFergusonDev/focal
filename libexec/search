@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# DESC: Searches the codebase for a regex pattern and copies the results.
+
+SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
+source "${SCRIPT_DIR}/../lib/core.sh"
+require_cmd "rg"
+
+if [ $# -eq 0 ]; then
+  echo "Usage: ai-search <pattern>"
+  exit 1
+fi
+
+output_and_copy "$(rg --context 5 "$1")" "Search results copied to clipboard"

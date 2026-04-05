@@ -1,0 +1,172 @@
+[project]
+name = "focal"
+version = "0.1.0"
+description = "CLI tool for instantly extracting clean, token-efficient codebase context, diffs, and CI logs for LLM workflows."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Jackson Ferguson", email = "jackson.ferguson0@gmail.com" }
+]
+dependencies = []
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+]
+
+[project.urls]
+Repository = "https://github.com/JacksonFergusonDev/focal"
+Issues = "https://github.com/JacksonFergusonDev/focal/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["focal"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/focal",
+    "/bin",
+    "/lib",
+    "/libexec",
+    "/README.md",
+    "/LICENSE"
+]
+
+[dependency-groups]
+ci = [
+    "mypy>=1.19.1",
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    "pytest-mock>=3.15.1",
+    "ruff>=0.15.6",
+]
+dev = [
+    { include-group = "ci" },
+    "bump-my-version>=1.2.6",
+    "pre-commit>=4.5.1",
+]
+
+# ==================================================
+# Tool Configuration
+# ==================================================
+
+# ---- ruff ---- #
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+indent-width = 4
+
+exclude = [
+    ".git",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".venv",
+    "build",
+    "dist",
+    "docs",
+    "site",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "PT", "C4", "D", "RUF", "N", "RET"]
+ignore = [
+    "E501",
+    "D100",   # Missing docstring in public module
+    "D104",   # Missing docstring in public package
+    "D107",   # Missing docstring in __init__
+]
+
+# Allow ignored variables (e.g. for unpacking)
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+known-first-party = ["focal"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = ["D"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+# ---- mypy ---- #
+
+[tool.mypy]
+python_version = "3.10"
+pretty = true
+show_error_codes = true
+show_error_context = true
+warn_return_any = true
+warn_unused_configs = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+ignore_missing_imports = false
+exclude = [
+    "^libexec/",
+    "^\\.venv/",
+    "^build/",
+]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+# ---- pytest ---- #
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers"
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.coverage.run]
+source = ["focal"]
+branch = true
+
+[tool.coverage.report]
+omit = ["focal/**/__init__.py"]
+show_missing = true
+skip_covered = true
+
+# ---- bump-my-version ---- #
+
+[tool.bumpversion]
+current_version = "0.1.0"
+parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
+serialize = ["{major}.{minor}.{patch}"]
+search = "{current_version}"
+replace = "{new_version}"
+regex = false
+ignore_missing_version = false
+tag = false
+sign_tags = false
+tag_name = "v{new_version}"
+tag_message = "Bump version: {current_version} → {new_version}"
+allow_dirty = false
+commit = true
+message = "chore: bump version {current_version} → {new_version}"
+commit_args = ""
+
+[[tool.bumpversion.files]]
+filename = "pyproject.toml"
+search = 'version = "{current_version}"'
+replace = 'version = "{new_version}"'
+
+[[tool.bumpversion.files]]
+filename = "README.md"
+search = "# Focal (v{current_version})"
+replace = "# Focal (v{new_version})"

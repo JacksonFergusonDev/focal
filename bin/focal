@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Resolve paths
+SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
+REPO_ROOT="$(realpath "${SCRIPT_DIR}/..")"
+LIBEXEC_DIR="${REPO_ROOT}/libexec"
+
+# Internal helper to safely list commands for autocompletion
+_list_commands() {
+  for f in "$LIBEXEC_DIR"/*; do
+    if [ -f "$f" ] && [ -x "$f" ]; then
+      basename "$f"
+    fi
+  done | sort
+}
+
+# Internal helper to parse descriptions and print the help menu
+_print_help() {
+  echo "Usage: focal <command> [args]"
+  echo ""
+  echo "Available commands:"
+
+  for f in "$LIBEXEC_DIR"/*; do
+    if [ -f "$f" ] && [ -x "$f" ]; then
+      local cmd_name
+      cmd_name=$(basename "$f")
+
+      # Extract the first line starting with '# DESC: '
+      local desc
+      desc=$(awk -F '# DESC: ' '/^# DESC: / {print $2; exit}' "$f")
+
+      # Use printf for columnar alignment (reserves 15 chars for command name)
+      printf "  %-15s %s\n" "$cmd_name" "${desc:-No description provided.}"
+    fi
+  done | sort
+}
+
+# Route: Autocompletion
+if [ "${1:-}" == "--commands" ]; then
+  _list_commands
+  exit 0
+fi
+
+# Route: Global Help Menu (matches zero args, help, -h, or --help)
+if [ $# -eq 0 ] || [[ $1 =~ ^(help|-h|--help)$ ]]; then
+  _print_help
+  exit 0
+fi
+
+COMMAND="$1"
+shift || true
+
+# Direct 1:1 mapping between subcommand and filename
+SUBCOMMAND_BIN="${LIBEXEC_DIR}/${COMMAND}"
+
+if [ -x "$SUBCOMMAND_BIN" ]; then
+  exec "$SUBCOMMAND_BIN" "$@"
+else
+  echo "Error: Unknown command '$COMMAND'" >&2
+  echo "Run 'focal help' for a list of available commands." >&2
+  exit 1
+fi

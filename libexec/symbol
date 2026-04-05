@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# DESC: Locates files containing a specific symbol and copies full contents.
+
+SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
+source "${SCRIPT_DIR}/../lib/core.sh"
+
+require_cmd "rg"
+
+if [ $# -eq 0 ]; then
+  echo "Usage: ai-symbol <symbol>"
+  exit 1
+fi
+
+buffer=""
+
+# Iterate over files containing the symbol and route them through our formatter
+while IFS= read -r file; do
+  [ -z "$file" ] && continue
+  buffer="$buffer$(format_file_for_llm "$file")"
+done < <(rg -l "$1")
+
+[ -z "$buffer" ] && exit 0
+
+output_and_copy "$buffer" "Symbol context for '$1' copied to clipboard"

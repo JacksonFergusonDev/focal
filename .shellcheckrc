@@ -1,0 +1,7 @@
+# Enforce a specific bash version (3.2 is the macOS default)
+# This will flag things like associative arrays (declare -A)
+shell=bash
+
+# Enforce strictness
+external-sources=true
+source-path=SCRIPTDIR

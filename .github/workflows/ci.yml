@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    name: Test on ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.12", "3.14"]
+
+    steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+    # 1. Linux Dependency Routing
+    - name: Install System Dependencies (Ubuntu)
+      if: runner.os == 'Linux'
+      run: sudo apt-get update && sudo apt-get install -y shellcheck shfmt bats
+
+    # 2. macOS Dependency Routing
+    - name: Install System Dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: brew install shellcheck shfmt bats-core
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@e06108dd0aef18192324c70427afc47652e63a82 # v7
+      with:
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: uv sync --group ci
+
+    - name: Install just
+      uses: taiki-e/install-action@just
+
+    - name: Run Full CI Pipeline
+      run: just ci
