@@ -1,0 +1,36 @@
+name: Feature Request
+description: Suggest a new context extractor, integration, or core enhancement.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea for a new `focal` command or workflow improvement? Detail the rationale and proposed implementation below.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement / Use Case
+      description: Is your feature request related to a specific workflow friction point?
+      placeholder: It is currently difficult to extract the context of a specific Dockerfile build stage...
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the technical implementation or user experience of the feature you want.
+      placeholder: A new `focal docker` command that parses the AST of a Dockerfile...
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you considered other tools or workarounds?
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contribution
+      description: Are you willing to submit a Pull Request to implement this feature?
+      options:
+        - label: Yes, I can write the PR for this.

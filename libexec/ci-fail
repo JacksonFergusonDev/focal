@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# DESC: Fetches and formats GitHub Actions CI failure logs.
+
+# 1. Source the core library
+SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
+source "${SCRIPT_DIR}/../lib/core.sh"
+
+# 2. Check dependencies
+require_cmd "gh"
+require_cmd "fzf"
+
+# 3. Frontend Logic
+selected=$(gh run list --status failure --limit 30 --json databaseId,workflowName,name \
+  --jq '.[] | "\(.databaseId)\t\(.workflowName): \(.name)"' |
+  fzf --prompt="Select failed CI run: " || true)
+
+[ -z "$selected" ] && exit 0
+
+run_id=$(echo "$selected" | awk -F'\t' '{print $1}')
+
+# 4. Backend Execution
+formatted=$("$PYTHON_EXEC" -m focal.gh_ci_fail "$run_id")
+
+# 5. Output
+output_and_copy "$formatted" "Copied CI failure logs for run $run_id"

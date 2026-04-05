@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# DESC: Copies metadata, intent, and code diff for a GitHub PR.
+
+SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
+source "${SCRIPT_DIR}/../lib/core.sh"
+require_cmd "gh"
+
+if [ $# -eq 0 ]; then
+  if ! pr_id=$(gh pr view --json number --jq '.number' 2>/dev/null); then
+    selected=$(gh pr list --limit 30 --json number,headRefName,title \
+      --jq '.[] | "\(.number)\t[\(.headRefName)] \(.title)"' |
+      fzf --prompt="Select PR: " || true)
+
+    [ -z "$selected" ] && exit 0
+    pr_id=$(echo "$selected" | awk -F'\t' '{print $1}')
+  fi
+else
+  pr_id="$1"
+fi
+
+formatted=$("$PYTHON_EXEC" -m focal.gh_pr_diff "$pr_id")
+output_and_copy "$formatted" "Copied context and diff for PR #$pr_id"

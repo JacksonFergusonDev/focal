@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# DESC: Searches the codebase using an abstract syntax tree pattern.
+
+SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
+source "${SCRIPT_DIR}/../lib/core.sh"
+require_cmd "ast-grep"
+
+if [ $# -eq 0 ]; then
+  echo "Usage: ai-ast <pattern>"
+  echo "Example: ai-ast 'class \$NAME'"
+  exit 1
+fi
+
+output_and_copy "$(ast-grep --pattern "$1")" "AST search results copied to clipboard"

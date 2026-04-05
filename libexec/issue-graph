@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# DESC: Copies a GitHub issue description alongside its comment thread.
+
+SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
+source "${SCRIPT_DIR}/../lib/core.sh"
+require_cmd "gh"
+
+if [ $# -eq 0 ]; then
+  selected=$(gh issue list --limit 50 --json number,title \
+    --jq '.[] | "\(.number)\t\(.title)"' |
+    fzf --prompt="Select issue: " || true)
+
+  [ -z "$selected" ] && exit 0
+  issue_id=$(echo "$selected" | awk -F'\t' '{print $1}')
+else
+  issue_id="$1"
+fi
+
+formatted=$("$PYTHON_EXEC" -m focal.gh_issue_graph "$issue_id")
+output_and_copy "$formatted" "Copied context graph for Issue #$issue_id"

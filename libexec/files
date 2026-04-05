@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# DESC: Copies the contents of one or more files, with metadata.
+
+SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
+source "${SCRIPT_DIR}/../lib/core.sh"
+
+# 1. Determine input method (Globbing vs Interactive)
+if [ $# -gt 0 ]; then
+  # User passed files directly: focal files libexec/*.py
+  # We use printf to convert the bash array of arguments into a newline-separated string
+  files=$(printf "%s\n" "$@")
+else
+  require_cmd "fzf"
+  require_cmd "bat"
+  require_cmd "fd"
+
+  # Interactive mode
+  files=$(interactive_file_select "Files: " -m --header "TAB: multi-select | CTRL-A: select all | ENTER: confirm")
+fi
+
+[ -z "$files" ] && exit 0
+
+# 2. Build the Metadata Preamble
+buffer="# Workspace Context"$'\n'
+buffer+="PWD: $(pwd)"$'\n'
+
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  buffer+="Git Branch: $(git branch --show-current)"$'\n'
+  buffer+="Git Commit: $(git rev-parse --short HEAD)"$'\n'
+fi
+buffer+=$'\n---\n\n'
+
+# 3. Process Files
+while IFS= read -r file; do
+  [ -z "$file" ] || [ ! -f "$file" ] && continue
+
+  section=$(format_file_for_llm "$file")
+  buffer="$buffer$section"
+
+  echo "Added $file"
+done <<<"$files"
+
+output_and_copy "$buffer" "Copied context"

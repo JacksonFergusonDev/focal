@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# DESC: Generates a high-level project context summary.
+
+SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
+source "${SCRIPT_DIR}/../lib/core.sh"
+
+require_cmd "git"
+require_cmd "fzf"
+require_cmd "bat"
+require_cmd "fd"
+
+MAX_LINES=500
+
+print_file() {
+  local file="$1"
+  local lang="$2"
+
+  if [ ! -f "$file" ]; then
+    return
+  fi
+
+  echo "# $file"
+  echo "\`\`\`$lang"
+  head -n "$MAX_LINES" "$file"
+  echo '```'
+  echo
+}
+
+generate_tree() {
+  echo "# Repository Tree"
+  echo '```text'
+  generate_repo_tree
+  echo '```'
+  echo
+}
+
+generate_git_info() {
+
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "# Git Info"
+    echo '```text'
+
+    echo "Branch: $(git branch --show-current)"
+    echo "Commit: $(git rev-parse --short HEAD)"
+
+    echo
+    echo "Modified files:"
+    git status --porcelain
+
+    echo '```'
+    echo
+  fi
+}
+
+generate_context() {
+
+  generate_tree
+  generate_git_info
+
+  print_file "pyproject.toml" "toml"
+  print_file "package.json" "json"
+  print_file "requirements.txt" "text"
+  print_file "README.md" "markdown"
+
+}
+
+OUTPUT="$(generate_context)"
+
+output_and_copy "$OUTPUT" "Project context copied to clipboard"

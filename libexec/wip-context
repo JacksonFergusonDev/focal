@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# DESC: Copies a comprehensive diff, status, and topological context.
+
+SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
+source "${SCRIPT_DIR}/../lib/core.sh"
+
+require_cmd "git"
+
+# Delegate branch resolution and diff generation to Python
+if ! formatted=$("$PYTHON_EXEC" -m focal.wip_context "$@"); then
+  exit 1
+fi
+
+output_and_copy "$formatted" "Copied WIP branch context"
