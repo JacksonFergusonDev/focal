@@ -33,13 +33,44 @@ fi
 buffer+=$'\n---\n\n'
 
 # 3. Process Files
+added_count=0
+empty_count=0
+truncated_count=0
+skipped_count=0
+
 while IFS= read -r file; do
-  [ -z "$file" ] || [ ! -f "$file" ] && continue
+  if [ -z "$file" ] || [ ! -f "$file" ]; then
+    continue
+  fi
 
   section=$(format_file_for_llm "$file")
   buffer="$buffer$section"
 
-  echo "Added $file"
+  # Tally and log file states (Safe arithmetic assignment to avoid set -e traps)
+  if [[ $section == *"file omitted:"* ]]; then
+    echo "Skipped noise/binary: $file"
+    skipped_count=$((skipped_count + 1))
+  elif [[ $section == *"...[file truncated:"* ]]; then
+    echo "Added (truncated): $file"
+    truncated_count=$((truncated_count + 1))
+  elif [[ $section == *"[empty file]"* ]]; then
+    echo "Added (empty): $file"
+    empty_count=$((empty_count + 1))
+  else
+    echo "Added $file"
+    added_count=$((added_count + 1))
+  fi
 done <<<"$files"
 
+# Copy payload to clipboard and print token estimate
 output_and_copy "$buffer" "Copied context"
+
+# 4. Print Summary Report
+if [ "$skipped_count" -gt 0 ] || [ "$truncated_count" -gt 0 ] || [ "$empty_count" -gt 0 ]; then
+  echo ""
+  echo "--- Extraction Summary ---"
+  echo "Added fully: $added_count files"
+  [ "$empty_count" -gt 0 ] && echo "Added empty: $empty_count files"
+  [ "$truncated_count" -gt 0 ] && echo "Truncated (>1500 lines): $truncated_count files"
+  [ "$skipped_count" -gt 0 ] && echo "Skipped (noise/binary): $skipped_count files"
+fi
