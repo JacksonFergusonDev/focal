@@ -1,5 +1,38 @@
 #!/usr/bin/env bash
 
+# ==========================================
+# Core Library: Shared Utilities & Constants
+# ==========================================
+
+# ------------------------------------------
+# Global Noise/Asset Filtering
+# ------------------------------------------
+
+FOCAL_NOISE_EXTS=(
+  # Compiled/Binary Data
+  "parquet" "pkl" "sqlite" "db" "npy" "npz" "h5" "hdf5" "fits" "data" "nc"
+  # Media & Assets
+  "svg" "png" "jpg" "jpeg" "gif" "ico" "webp" "pdf" "mp4" "webm" "mov" "avi" "mkv" "mp3" "wav"
+  # Frontend build artifacts
+  "min.js" "min.css" "map"
+  # Archives, Lockfiles & Compiled
+  "zip" "tar" "gz" "xz" "bz2" "whl" "pyc" "bin" "exe" "so" "dylib" "dll" "lock"
+)
+
+FOCAL_NOISE_REGEX="^($(
+  IFS='|'
+  echo "${FOCAL_NOISE_EXTS[*]}"
+))$"
+
+FD_NOISE_FLAGS=()
+for ext in "${FOCAL_NOISE_EXTS[@]}"; do
+  FD_NOISE_FLAGS+=("-E" "*.$ext")
+done
+
+# ------------------------------------------
+# Environment & Path Resolution
+# ------------------------------------------
+
 # 1. Path Resolution
 LIB_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 REPO_ROOT="$(realpath "${LIB_DIR}/..")"
@@ -17,7 +50,11 @@ else
   PYTHON_EXEC="python3"
 fi
 
-# 2. Command Validation
+# ------------------------------------------
+# Utility Functions
+# ------------------------------------------
+
+# Command Validation
 require_cmd() {
   local cmd="$1"
   if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -26,7 +63,11 @@ require_cmd() {
   fi
 }
 
-# 3. Clipboard Detection (Internal)
+# ------------------------------------------
+# Clipboard Detection & Output Handling
+# ------------------------------------------
+
+# Clipboard Detection (Internal)
 _get_clipboard_cmd() {
   if command -v pbcopy >/dev/null 2>&1; then
     echo "pbcopy"
@@ -41,7 +82,7 @@ _get_clipboard_cmd() {
   fi
 }
 
-# 4. Standardized Output Routine
+# Standardized Output Routine
 output_and_copy() {
   local content="$1"
   local base_msg="$2"
@@ -64,13 +105,17 @@ output_and_copy() {
   fi
 }
 
-# 5. File UI & Parsing
+# ------------------------------------------
+# File Selection & LLM Formatting
+# ------------------------------------------
+
+# File UI & Parsing
 interactive_file_select() {
   local prompt="${1:-Select file: }"
   shift || true
   local fzf_args=("$@")
 
-  fd --type f --hidden --exclude .git | fzf "${fzf_args[@]}" \
+  fd --type f --hidden --exclude .git "${FD_NOISE_FLAGS[@]}" | fzf "${fzf_args[@]}" \
     --prompt="$prompt" \
     --bind "ctrl-a:select-all,ctrl-d:deselect-all" \
     --preview "${REPO_ROOT}/lib/preview.sh {}" || true
@@ -79,21 +124,46 @@ interactive_file_select() {
 format_file_for_llm() {
   local file="$1"
   local ext="${file##*.}"
+  local ext_lower
+  ext_lower=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
   local content=""
 
-  if [[ $ext == "ipynb" ]]; then
+  # Intercept empty files immediately (e.g., __init__.py)
+  if [ ! -s "$file" ]; then
+    content="[empty file]"
+  elif [[ $ext_lower == "ipynb" ]]; then
     content=$("$PYTHON_EXEC" -m focal.notebook "$file")
-  elif file "$file" | grep -q binary; then
-    content="[binary file omitted: $file]"
+  elif [[ $ext_lower =~ $FOCAL_NOISE_REGEX ]]; then
+    content="[asset/noise file omitted: $file]"
   else
-    content=$(cat "$file")
+    local mime_enc
+    mime_enc=$(file -b --mime-encoding "$file" 2>/dev/null || echo "binary")
+
+    if [[ $mime_enc == "binary" ]]; then
+      content="[binary file omitted: $file]"
+    else
+      # Global Text Failsafe
+      local total_lines
+      total_lines=$(wc -l <"$file" | tr -d ' ')
+
+      if [ "$total_lines" -gt 1500 ]; then
+        content=$(head -n 1500 "$file")
+        content+=$'\n\n...[file truncated: showing first 1500 of '"$total_lines"' lines]'
+      else
+        content=$(cat "$file")
+      fi
+    fi
   fi
 
   # Return formatted markdown block
   printf "# %s\n\`\`\`%s\n%s\n\`\`\`\n\n" "$file" "$ext" "$content"
 }
 
-# 6. Context Generation
+# ------------------------------------------
+# Repository Context Generation
+# ------------------------------------------
+
+# Context Generation
 generate_repo_tree() {
   if command -v tree >/dev/null 2>&1; then
     tree -a -I '.git|node_modules|.venv|__pycache__|dist|build' --gitignore 2>/dev/null
