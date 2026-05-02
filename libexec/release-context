@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# DESC: Copies metadata and intent for PRs merged since the last release.
+
+SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
+source "${SCRIPT_DIR}/../lib/core.sh"
+
+require_cmd "git"
+require_cmd "gh"
+
+# 1. Resolve the latest tag, suppressing stderr if none exist
+LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+if [ -z "$LATEST_TAG" ]; then
+  # Fallback: Find the chronological first commit of the repository
+  LATEST_TAG=$(git rev-list --max-parents=0 HEAD | tail -n 1)
+  TAG_DATE=$(git log -1 --format=%cI "$LATEST_TAG")
+  HEADER_REF="Initial Commit"
+else
+  # Get the ISO 8601 commit date of the tag
+  TAG_DATE=$(git log -1 --format=%cI "$LATEST_TAG")
+  HEADER_REF="$LATEST_TAG"
+fi
+
+# 2. Extract repository architecture context
+repo_context="$(generate_project_context)"
+
+# 3. Pass the parameters to the Python backend
+if ! formatted=$("$PYTHON_EXEC" -m focal.gh_release_context "$TAG_DATE" "$HEADER_REF"); then
+  exit 1
+fi
+
+# 4. Concatenate and copy to clipboard
+combined_payload="${repo_context}${formatted}"
+output_and_copy "$combined_payload" "Copied repository and release context since $HEADER_REF"
