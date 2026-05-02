@@ -163,11 +163,51 @@ format_file_for_llm() {
 # Repository Context Generation
 # ------------------------------------------
 
-# Context Generation
 generate_repo_tree() {
   if command -v tree >/dev/null 2>&1; then
     tree -a -I '.git|node_modules|.venv|__pycache__|dist|build' --gitignore 2>/dev/null
   else
     fd --hidden --exclude .git --type f | sed 's|[^/]*/|  |g'
   fi
+}
+
+_print_context_file() {
+  local file="$1"
+  local lang="$2"
+  local max_lines=500
+
+  if [ ! -f "$file" ]; then
+    return
+  fi
+
+  echo "# $file"
+  echo "\`\`\`$lang"
+  head -n "$max_lines" "$file"
+  echo '```'
+  echo
+}
+
+generate_project_context() {
+  echo "# Repository Tree"
+  echo '```text'
+  generate_repo_tree
+  echo '```'
+  echo
+
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "# Git Info"
+    echo '```text'
+    echo "Branch: $(git branch --show-current)"
+    echo "Commit: $(git rev-parse --short HEAD)"
+    echo
+    echo "Modified files:"
+    git status --porcelain
+    echo '```'
+    echo
+  fi
+
+  _print_context_file "pyproject.toml" "toml"
+  _print_context_file "package.json" "json"
+  _print_context_file "requirements.txt" "text"
+  _print_context_file "README.md" "markdown"
 }
