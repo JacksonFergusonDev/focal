@@ -88,8 +88,24 @@ output_and_copy() {
   local base_msg="$2"
   read -r -a clip_cmd <<<"$(_get_clipboard_cmd)"
 
+  # Centralized LLM boundary and metadata injection
+  local payload="<context>"$'\n'
+  payload+="> [!NOTE]"$'\n'
+  payload+="> The following is an automated extraction of the user's local codebase environment."$'\n'
+  payload+="> Use this metadata, directory structure, and file contents to inform your response to the user's subsequent prompt."$'\n\n'
+
+  payload+="# Workspace Context"$'\n'
+  payload+="PWD: $(pwd)"$'\n'
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    payload+="Git Branch: $(git branch --show-current)"$'\n'
+    payload+="Git Commit: $(git rev-parse --short HEAD)"$'\n'
+  fi
+  payload+=$'\n---\n\n'
+  payload+="${content}"$'\n'
+  payload+="</context>"$'\n'
+
   # Calculate rough token estimate (1 token ~= 4 chars)
-  local char_count=${#content}
+  local char_count=${#payload}
   local approx_tokens=$((char_count / 4))
 
   # Inject the token estimate into the success message
@@ -98,10 +114,10 @@ output_and_copy() {
   # Check if the array has elements
   if [ ${#clip_cmd[@]} -gt 0 ]; then
     # Use %s to prevent escape sequence expansion
-    printf "%s" "$content" | "${clip_cmd[@]}"
+    printf "%s" "$payload" | "${clip_cmd[@]}"
     echo "$success_msg"
   else
-    printf "%s" "$content"
+    printf "%s" "$payload"
   fi
 }
 
@@ -115,7 +131,15 @@ interactive_file_select() {
   shift || true
   local fzf_args=("$@")
 
-  fd --type f --hidden --exclude .git "${FD_NOISE_FLAGS[@]}" | fzf "${fzf_args[@]}" \
+  # Dynamically build exclusions if the FOCAL_EXCLUDE_FILES array is populated
+  local extra_fd_args=()
+  if [ -n "${FOCAL_EXCLUDE_FILES+x}" ] && [ "${#FOCAL_EXCLUDE_FILES[@]}" -gt 0 ]; then
+    for excl in "${FOCAL_EXCLUDE_FILES[@]}"; do
+      extra_fd_args+=("--exclude" "$excl")
+    done
+  fi
+
+  fd --type f --hidden --exclude .git "${FD_NOISE_FLAGS[@]}" "${extra_fd_args[@]}" | fzf "${fzf_args[@]}" \
     --prompt="$prompt" \
     --bind "ctrl-a:select-all,ctrl-d:deselect-all" \
     --preview "${REPO_ROOT}/lib/preview.sh {}" || true

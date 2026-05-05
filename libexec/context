@@ -1,11 +1,66 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# DESC: Generates a high-level project context summary.
+# DESC: Generates a project context summary and allows selecting additional files.
 
 SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 source "${SCRIPT_DIR}/../lib/core.sh"
 
 require_cmd "git"
+require_cmd "fzf"
+require_cmd "bat"
+require_cmd "fd"
 
-output_and_copy "$(generate_project_context)" "Project context copied to clipboard"
+# 1. Resolve which core context files actually exist in the repo
+core_files=("README.md" "pyproject.toml" "package.json" "requirements.txt" "Cargo.toml")
+existing_core_files=()
+
+for f in "${core_files[@]}"; do
+  if [ -f "$f" ]; then
+    existing_core_files+=("$f")
+  fi
+done
+
+# 2. Configure the fzf interface
+header="TAB: multi-select | CTRL-A: select all"
+
+if [ "${#existing_core_files[@]}" -gt 0 ]; then
+  # Join existing files with a comma and space using printf (Bash 3.2 compatible)
+  joined_files=$(printf ", %s" "${existing_core_files[@]}")
+  joined_files="${joined_files:2}" # Strip the leading comma and space
+  header+=$'\n'"Auto-included: ${joined_files}"
+fi
+
+# Pass the existing files to core.sh to hide them from the fd search stream
+FOCAL_EXCLUDE_FILES=("${existing_core_files[@]}")
+
+additional_files=$(interactive_file_select "Additional files: " -m --header "$header")
+
+# 3. Inject Repository Tree and Status
+buffer="# Repository Tree"$'\n```text\n'
+buffer+="$(generate_repo_tree)"$'\n```\n\n'
+
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  buffer+="# Git Info"$'\n```text\n'
+  buffer+="Branch: $(git branch --show-current)"$'\n'
+  buffer+="Commit: $(git rev-parse --short HEAD)"$'\n\n'
+  buffer+="Modified files:\n"
+  buffer+="$(git status --porcelain)"$'\n```\n\n'
+fi
+
+# 4. Process Core and Dynamic Files
+for f in "${existing_core_files[@]}"; do
+  buffer+="$(format_file_for_llm "$f")"
+done
+
+if [ -n "$additional_files" ]; then
+  while IFS= read -r file; do
+    if [ -z "$file" ] || [ ! -f "$file" ]; then
+      continue
+    fi
+    buffer+="$(format_file_for_llm "$file")"
+  done <<<"$additional_files"
+fi
+
+# 5. Output (Boundary tags handled naturally by output_and_copy)
+output_and_copy "$buffer" "Context and files copied to clipboard"
