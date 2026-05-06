@@ -186,7 +186,7 @@ def get_diff_for_files(
             omitted_count += 1
             continue
 
-        _, diff_text = run_git(["diff", f"{base}..HEAD", "--", file])
+        _, diff_text = run_git(["diff", "-M", f"{base}..HEAD", "--", file])
         if not diff_text:
             continue
 
