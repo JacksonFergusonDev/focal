@@ -115,6 +115,11 @@ def resolve_base_branch(target: str | None) -> str:
             sys.exit(f"Error: Specified base branch '{target}' does not exist.")
         return target
 
+    # Dynamically query the default branch of the remote
+    code, out = run_git(["symbolic-ref", "refs/remotes/origin/HEAD"], check=False)
+    if code == 0:
+        return out.split("/")[-1].strip()
+
     fallbacks = ["main", "master", "develop"]
     for branch in fallbacks:
         code, _ = run_git(["rev-parse", "--verify", branch], check=False)
