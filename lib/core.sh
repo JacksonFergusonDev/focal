@@ -125,6 +125,7 @@ output_and_copy() {
     printf "%s" "$payload" | "${clip_cmd[@]}"
     echo "$success_msg"
   else
+    echo >&2 "focal: No clipboard manager detected. Dumping to stdout..."
     printf "%s" "$payload"
   fi
 }
