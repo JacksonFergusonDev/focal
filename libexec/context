@@ -12,7 +12,7 @@ require_cmd "bat"
 require_cmd "fd"
 
 # 1. Resolve which core context files actually exist in the repo
-core_files=("README.md" "pyproject.toml" "package.json" "requirements.txt" "Cargo.toml")
+core_files=("README.md" "pyproject.toml" "package.json" "requirements.txt" "CONTRIBUTING.md" "Cargo.toml")
 existing_core_files=()
 
 for f in "${core_files[@]}"; do
