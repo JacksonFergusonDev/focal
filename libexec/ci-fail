@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 source "${SCRIPT_DIR}/../lib/core.sh"
 
 # 2. Check dependencies
-require_cmd "gh"
+require_gh_auth
 require_cmd "fzf"
 
 # 3. Frontend Logic

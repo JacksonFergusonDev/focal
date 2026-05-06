@@ -63,6 +63,14 @@ require_cmd() {
   fi
 }
 
+require_gh_auth() {
+  require_cmd "gh"
+  if ! gh auth status >/dev/null 2>&1; then
+    echo >&2 "error: GitHub CLI is not authenticated. Run 'gh auth login'."
+    exit 1
+  fi
+}
+
 # ------------------------------------------
 # Clipboard Detection & Output Handling
 # ------------------------------------------
