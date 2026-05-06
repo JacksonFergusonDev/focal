@@ -197,11 +197,20 @@ format_file_for_llm() {
 # ------------------------------------------
 
 generate_repo_tree() {
-  if command -v tree >/dev/null 2>&1; then
-    tree -a -I '.git|node_modules|.venv|__pycache__|dist|build' --gitignore 2>/dev/null
-  else
-    fd --hidden --exclude .git --type f | sed 's|[^/]*/|  |g'
+  if ! command -v tree >/dev/null 2>&1; then
+    echo >&2 "focal: 'tree' command not found. Please install it (e.g., brew install tree)."
+    return 1
   fi
+
+  # -a: All files
+  # -F: Append / to directories
+  # --noreport: No file/directory count at the end
+  # -L 6: Limit depth to 6 levels
+  # -I: Ignore common noise directories
+  # --gitignore: Filter using .gitignore (requires tree v2.0.0+)
+  tree -a -F --noreport -L 6 \
+    -I '.git|node_modules|.venv|__pycache__|dist|build' \
+    --gitignore 2>/dev/null
 }
 
 _print_context_file() {
