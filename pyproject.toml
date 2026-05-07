@@ -8,7 +8,10 @@ license = { file = "LICENSE" }
 authors = [
     { name = "Jackson Ferguson", email = "jackson.ferguson0@gmail.com" }
 ]
-dependencies = []
+dependencies = [
+    "beautifulsoup4>=4.14.3",
+    "markdownify>=1.2.2",
+]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",

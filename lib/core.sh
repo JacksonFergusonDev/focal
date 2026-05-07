@@ -98,17 +98,21 @@ output_and_copy() {
 
   # Centralized LLM boundary and metadata injection
   local payload="<context>"$'\n'
-  payload+="> [!NOTE]"$'\n'
-  payload+="> The following is an automated extraction of the user's local codebase environment."$'\n'
-  payload+="> Use this metadata, directory structure, and file contents to inform your response to the user's subsequent prompt."$'\n\n'
 
-  payload+="# Workspace Context"$'\n'
-  payload+="PWD: $(pwd)"$'\n'
-  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    payload+="Git Branch: $(git branch --show-current)"$'\n'
-    payload+="Git Commit: $(git rev-parse --short HEAD)"$'\n'
+  if [ -z "${FOCAL_OMIT_WORKSPACE:-}" ]; then
+    payload+="> [!NOTE]"$'\n'
+    payload+="> The following is an automated extraction of the user's local codebase environment."$'\n'
+    payload+="> Use this metadata, directory structure, and file contents to inform your response to the user's subsequent prompt."$'\n\n'
+
+    payload+="# Workspace Context"$'\n'
+    payload+="PWD: $(pwd)"$'\n'
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      payload+="Git Branch: $(git branch --show-current)"$'\n'
+      payload+="Git Commit: $(git rev-parse --short HEAD)"$'\n'
+    fi
+    payload+=$'\n---\n\n'
   fi
-  payload+=$'\n---\n\n'
+
   payload+="${content}"$'\n'
   payload+="</context>"$'\n'
 
