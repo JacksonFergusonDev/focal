@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# DESC: Extracts a webpage (via URL or piped HTML) and formats its semantic content.
+
+SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
+source "${SCRIPT_DIR}/../lib/core.sh"
+
+# Define ANSI formatting codes
+BOLD="\033[1m"
+CYAN="\033[36m"
+GREEN="\033[32m"
+YELLOW="\033[33m"
+DIM="\033[2m"
+RESET="\033[0m"
+
+print_help() {
+  printf "\n%b%bFocal Web Extractor%b\n" "$BOLD" "$CYAN" "$RESET"
+  printf "%bExtracts semantic markdown from public URLs or authenticated piped HTML.%b\n\n" "$DIM" "$RESET"
+
+  printf "%bUSAGE%b\n" "$BOLD" "$RESET"
+  printf "  %bfocal web%b <url>\n" "$GREEN" "$RESET"
+  printf "  pbpaste | %bfocal web%b\n\n" "$GREEN" "$RESET"
+
+  printf "%bEXAMPLES%b\n" "$BOLD" "$RESET"
+  printf "  %b# Fetch a public documentation page%b\n" "$YELLOW" "$RESET"
+  printf "  focal web https://docs.python.org/3/\n\n"
+
+  printf "  %b# Parse an authenticated dashboard copied to your clipboard%b\n" "$YELLOW" "$RESET"
+  printf "  pbpaste | focal web\n\n"
+}
+
+# 1. Check if we have piped input (stdin is not a terminal)
+if [ ! -t 0 ]; then
+  if ! formatted=$(cat | "$PYTHON_EXEC" -m focal.web_context); then
+    exit 1
+  fi
+  output_and_copy "$formatted" "Copied markdown context from piped HTML"
+  exit 0
+fi
+
+# 2. Check for bare execution or help flags
+if [ $# -eq 0 ] || [[ $1 =~ ^(help|-h|--help)$ ]]; then
+  print_help
+
+  # Exit 1 if bare execution (missing required arg), exit 0 if explicitly asked for help
+  if [ $# -eq 0 ]; then exit 1; else exit 0; fi
+fi
+
+# 3. Process URL argument
+url="$1"
+
+if [[ ! $url =~ ^https?:// ]]; then
+  url="https://$url"
+fi
+
+if ! formatted=$("$PYTHON_EXEC" -m focal.web_context "$url"); then
+  exit 1
+fi
+
+output_and_copy "$formatted" "Copied markdown context for $url"
