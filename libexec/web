@@ -3,6 +3,7 @@ set -euo pipefail
 
 # DESC: Extracts a webpage (via URL or piped HTML) and formats its semantic content.
 
+export FOCAL_OMIT_WORKSPACE=1
 SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 source "${SCRIPT_DIR}/../lib/core.sh"
 

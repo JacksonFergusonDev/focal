@@ -11,6 +11,7 @@ def parse_html_to_md(html: str, source_label: str) -> str:
     """Strips noisy DOM elements from HTML and returns clean Markdown."""
     soup = BeautifulSoup(html, "html.parser")
 
+    # Only strip tags that are explicitly designed for non-content or execution
     noise_tags = [
         "script",
         "style",
@@ -22,11 +23,15 @@ def parse_html_to_md(html: str, source_label: str) -> str:
         "noscript",
         "svg",
         "form",
+        "iframe",
+        "button",
     ]
     for element in soup(noise_tags):
         element.decompose()
 
     md = markdownify(str(soup), heading_style="ATX", default_title=True)
+
+    # Clean up the whitespace graveyard left by decomposed tags
     md = re.sub(r"\n{3,}", "\n\n", md).strip()
 
     return f"# Source: {source_label}\n\n{md}\n"
