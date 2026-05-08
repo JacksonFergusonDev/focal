@@ -30,7 +30,7 @@ jobs:
       run: brew install shellcheck shfmt bats-core
 
     - name: Install uv
-      uses: astral-sh/setup-uv@e06108dd0aef18192324c70427afc47652e63a82 # v7
+      uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
       with:
         enable-cache: true
         cache-dependency-glob: "uv.lock"
@@ -39,8 +39,24 @@ jobs:
     - name: Install dependencies
       run: uv sync --group ci
 
-    - name: Install just
-      uses: taiki-e/install-action@just
+    - name: Lint with Ruff
+      run: |
+        uv run ruff check .
+        uv run ruff format --check .
 
-    - name: Run Full CI Pipeline
-      run: just ci
+    - name: Type check with Mypy
+      run: uv run mypy .
+
+    - name: Run tests
+      run: uv run pytest
+
+    - name: Lint shell scripts with Shellcheck
+      run: find bin libexec lib -maxdepth 1 -type f -exec shellcheck --severity=warning {} +
+
+    - name: Run Bash tests
+      run: bats tests/bash/
+
+    - name: Lint Markdown
+      uses: DavidAnson/markdownlint-cli2-action@ce4853d43830c74c1753b39f3cf40f71c2031eb9 # v23
+      with:
+        globs: '**/*.md'
