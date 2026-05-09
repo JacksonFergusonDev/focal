@@ -1,7 +1,7 @@
 <!-- markdownlint-disable-file MD041 -->
 <div align="center">
 
-# Focal (v0.1.0)
+# Focal (v0.2.0)
 
 **CLI utilities for AI-assisted development context and workflow automation.**
 
