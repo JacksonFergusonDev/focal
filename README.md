@@ -1,17 +1,27 @@
 <!-- markdownlint-disable-file MD041 -->
 <div align="center">
 
-# Focal (v0.2.0)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="assets/readme-light.svg">
+  <img alt="Focal Logo"
+       src="assets/readme-light.svg"
+       width="320"
+       style="max-width:100%; height:auto;">
+</picture>
+
+<br>
 
 **CLI utilities for AI-assisted development context and workflow automation.**
 
-[![CI](https://img.shields.io/github/actions/workflow/status/JacksonFergusonDev/focal/ci.yml?style=flat-square&color=white&labelColor=black&label=CI)](https://github.com/JacksonFergusonDev/focal/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/actions/workflow/status/JacksonFergusonDev/focal/release.yml?style=flat-square&color=white&labelColor=black&label=release)](https://github.com/JacksonFergusonDev/focal/actions/workflows/release.yml)
-[![Python](https://img.shields.io/badge/python-3.10+-white?style=flat-square&color=white&labelColor=black)](https://www.python.org/downloads/)
-[![Ruff](https://img.shields.io/badge/style-ruff-white?style=flat-square&color=white&labelColor=black)](https://github.com/astral-sh/ruff)
-[![Mypy](https://img.shields.io/badge/mypy-checked-white?style=flat-square&color=white&labelColor=black)](https://mypy-lang.org/)
-[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-white?style=flat-square&color=white&labelColor=black)](https://github.com/pre-commit/pre-commit)
-[![License](https://img.shields.io/badge/license-MIT-white?style=flat-square&color=white&labelColor=black)](LICENSE)
+[![Version](https://img.shields.io/github/v/release/JacksonFergusonDev/focal?style=flat-square&labelColor=0A0A0A&color=fb923c)](https://github.com/JacksonFergusonDev/focal/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/JacksonFergusonDev/focal/ci.yml?style=flat-square&color=fb923c&labelColor=0A0A0A&label=CI)](https://github.com/JacksonFergusonDev/focal/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/actions/workflow/status/JacksonFergusonDev/focal/release.yml?style=flat-square&color=fb923c&labelColor=0A0A0A&label=release)](https://github.com/JacksonFergusonDev/focal/actions/workflows/release.yml)
+[![Python](https://img.shields.io/badge/python-3.10+-fb923c?style=flat-square&labelColor=0A0A0A)](https://www.python.org/downloads/)
+[![Ruff](https://img.shields.io/badge/style-ruff-fb923c?style=flat-square&labelColor=0A0A0A)](https://github.com/astral-sh/ruff)
+[![Mypy](https://img.shields.io/badge/mypy-checked-fb923c?style=flat-square&labelColor=0A0A0A)](https://mypy-lang.org/)
+[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-fb923c?style=flat-square&labelColor=0A0A0A)](https://github.com/pre-commit/pre-commit)
+[![License](https://img.shields.io/badge/license-MIT-fb923c?style=flat-square&labelColor=0A0A0A)](LICENSE)
 
 </div>
 
