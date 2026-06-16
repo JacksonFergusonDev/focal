@@ -18,7 +18,7 @@ buffer=""
 # Iterate over files containing the symbol and route them through our formatter
 while IFS= read -r file; do
   [ -z "$file" ] && continue
-  buffer="$buffer$(format_file_for_llm "$file")"
+  buffer="$buffer$(format_file_for_llm "$file")" || true
 done < <(rg -l "$1")
 
 [ -z "$buffer" ] && exit 0

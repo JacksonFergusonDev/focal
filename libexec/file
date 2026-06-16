@@ -13,6 +13,6 @@ require_cmd "fd"
 file=$(interactive_file_select "Select file: ")
 [ -z "$file" ] && exit 0
 
-formatted=$(format_file_for_llm "$file")
+formatted=$(format_file_for_llm "$file") || true
 
 output_and_copy "$formatted" "Copied $file to clipboard"

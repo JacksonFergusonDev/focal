@@ -50,7 +50,7 @@ fi
 
 # 4. Process Core and Dynamic Files
 for f in "${existing_core_files[@]}"; do
-  buffer+="$(format_file_for_llm "$f")"
+  buffer+="$(format_file_for_llm "$f")" || true
 done
 
 if [ -n "$additional_files" ]; then
@@ -58,7 +58,7 @@ if [ -n "$additional_files" ]; then
     if [ -z "$file" ] || [ ! -f "$file" ]; then
       continue
     fi
-    buffer+="$(format_file_for_llm "$file")"
+    buffer+="$(format_file_for_llm "$file")" || true
   done <<<"$additional_files"
 fi
 

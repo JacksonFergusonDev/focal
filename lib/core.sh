@@ -165,19 +165,25 @@ format_file_for_llm() {
   ext_lower=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
   local content=""
 
+  # Define custom exit codes for out-of-band signaling
+  local status_code=0 # 0=Added, 10=Empty, 11=Skipped, 12=Truncated
+
   # Intercept empty files immediately (e.g., __init__.py)
   if [ ! -s "$file" ]; then
     content="[empty file]"
+    status_code=10
   elif [[ $ext_lower == "ipynb" ]]; then
     content=$("$PYTHON_EXEC" -m focal.notebook "$file")
   elif [[ $ext_lower =~ $FOCAL_NOISE_REGEX ]]; then
     content="[asset/noise file omitted: $file]"
+    status_code=11
   else
     local mime_enc
     mime_enc=$(file -b --mime-encoding "$file" 2>/dev/null || echo "binary")
 
     if [[ $mime_enc == "binary" ]]; then
       content="[binary file omitted: $file]"
+      status_code=11
     else
       # Global Text Failsafe
       local total_lines
@@ -186,6 +192,7 @@ format_file_for_llm() {
       if [ "$total_lines" -gt 1500 ]; then
         content=$(head -n 1500 "$file")
         content+=$'\n\n...[file truncated: showing first 1500 of '"$total_lines"' lines]'
+        status_code=12
       else
         content=$(cat "$file")
       fi
@@ -194,6 +201,9 @@ format_file_for_llm() {
 
   # Return formatted markdown block
   printf "# %s\n\`\`\`%s\n%s\n\`\`\`\n\n" "$file" "$ext" "$content"
+
+  # Transmit status out-of-band
+  return "$status_code"
 }
 
 # ------------------------------------------

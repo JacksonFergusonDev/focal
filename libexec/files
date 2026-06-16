@@ -34,23 +34,35 @@ while IFS= read -r file; do
     continue
   fi
 
-  section=$(format_file_for_llm "$file")
+  # Safely capture the markdown block AND the exit code without triggering set -e
+  status_code=0
+  section=$(format_file_for_llm "$file") || status_code=$?
   buffer="$buffer$section"
 
-  # Tally and log file states (Safe arithmetic assignment to avoid set -e traps)
-  if [[ $section == *"file omitted:"* ]]; then
-    echo "Skipped noise/binary: $file"
-    skipped_count=$((skipped_count + 1))
-  elif [[ $section == *"...[file truncated:"* ]]; then
-    echo "Added (truncated): $file"
-    truncated_count=$((truncated_count + 1))
-  elif [[ $section == *"[empty file]"* ]]; then
-    echo "Added (empty): $file"
-    empty_count=$((empty_count + 1))
-  else
-    echo "Added $file"
-    added_count=$((added_count + 1))
-  fi
+  # Tally and log file states based on out-of-band signals
+  case $status_code in
+    11)
+      echo "Skipped noise/binary: $file"
+      skipped_count=$((skipped_count + 1))
+      ;;
+    12)
+      echo "Added (truncated): $file"
+      truncated_count=$((truncated_count + 1))
+      ;;
+    10)
+      echo "Added (empty): $file"
+      empty_count=$((empty_count + 1))
+      ;;
+    0)
+      echo "Added $file"
+      added_count=$((added_count + 1))
+      ;;
+    *)
+      # Failsafe for unexpected errors
+      echo "Added $file"
+      added_count=$((added_count + 1))
+      ;;
+  esac
 done <<<"$files"
 
 # Copy payload to clipboard and print token estimate
