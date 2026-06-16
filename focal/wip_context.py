@@ -8,8 +8,6 @@ MAX_DIFF_CHARS = 30000
 # Expanded noise extensions covering data formats, serialized objects, media, and archives
 NOISE_EXTENSIONS = {
     # Data & Serialization
-    ".csv",
-    ".tsv",
     ".json",
     ".xml",
     ".parquet",
@@ -205,8 +203,17 @@ def get_diff_for_files(
         block = f"### `{file}`\n```diff\n{cleaned_diff}\n```"
 
         if len(block) > chars_remaining:
+            # Truncate the block to fit the remaining budget, ensuring we close the markdown fence.
+            # We allocate a ~60 char buffer for the truncation warning and closing ticks.
+            if chars_remaining > 100:
+                sliced_diff = block[: chars_remaining - 60]
+                sliced_diff += "\n...[diff truncated: context limit reached]\n```"
+                diff_blocks.append(sliced_diff)
+
             omitted_count += 1
-            chars_remaining = 0  # Force remaining files in the loop to be skipped
+            chars_remaining = (
+                0  # Deplete the budget to trigger skipping for subsequent files
+            )
         else:
             diff_blocks.append(block)
             chars_remaining -= len(block)
