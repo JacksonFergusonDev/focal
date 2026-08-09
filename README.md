@@ -200,7 +200,7 @@ focal release-context
 | `focal wip-context` | Extracts a comprehensive diff, uncommitted status, and topological context for your active branch. |
 | `focal diff` | Copies a formatted git diff of uncommitted or staged (`--staged`) changes. |
 | `focal pr-diff` | Fetches metadata, description intent, and the full code diff for a GitHub Pull Request. |
-| `focal issue-graph` | Copies a GitHub issue description alongside its sequential comment thread. |
+| `focal issues` | Interactively selects and copies GitHub issue descriptions alongside their comment threads. |
 | `focal release-context` | Copies metadata and intent for all PRs merged since the last release tag. |
 | `focal ci-fail` | Fetches and formats GitHub Actions CI failure logs for debugging. |
 
@@ -214,7 +214,7 @@ Focal orchestrates several industry-standard CLI tools to achieve low-latency ex
 - **`fd`**: Required for high-speed file traversal (respects `.gitignore`).
 - **`bat`**: Required for syntax-highlighted TUI previews.
 - **`rg` (ripgrep)**: Required for the `search`, `api`, and `symbol` regex extractors.
-- **`gh` (GitHub CLI)**: Required for `pr-diff`, `issue-graph`, `ci-fail`, and `release-context`.
+- **`gh` (GitHub CLI)**: Required for `pr-diff`, `issues`, `ci-fail`, and `release-context`.
 
 ---
 
