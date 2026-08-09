@@ -7,11 +7,18 @@ LIB_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 source "${LIB_DIR}/core.sh"
 
 TARGET="$1"
+
+# 2. Parse special flags
+if [[ $TARGET == "--stdin-markdown" ]]; then
+  bat --language=markdown --style=numbers --color=always
+  exit 0
+fi
+
 [ ! -f "$TARGET" ] && exit 0
 
 EXT="${TARGET##*.}"
 
-# 2. Parse Notebooks
+# 3. Parse Notebooks
 if [[ $EXT == "ipynb" ]]; then
   # Use the synchronized Python environment to run the notebook parser
   "$PYTHON_EXEC" -m focal.notebook "$TARGET" 2>/dev/null | bat --language=markdown --style=numbers --color=always
