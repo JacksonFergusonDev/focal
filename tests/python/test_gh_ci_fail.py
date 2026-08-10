@@ -90,3 +90,20 @@ def test_gh_ci_fail_filter_logs():
     )
     expected = "Real error log"
     assert filter_logs(raw_logs) == expected
+
+    # Test 5: Error context windowing
+    lines = []
+    for i in range(60):
+        lines.append(f"Job Name\tStep Name\t2026-08-10T19:09:40.125Z Line {i}")
+    lines[15] = "Job Name\tStep Name\t2026-08-10T19:09:40.125Z ##[error]Oops 1"
+    lines[50] = "Job Name\tStep Name\t2026-08-10T19:09:40.125Z ##[error]Oops 2"
+
+    raw_logs = "\n".join(lines)
+    result = filter_logs(raw_logs).splitlines()
+
+    assert "Line 0" in result
+    assert "Line 25" in result
+    assert "..." in result
+    assert "Line 30" not in result
+    assert "Line 35" in result
+    assert "Line 59" in result

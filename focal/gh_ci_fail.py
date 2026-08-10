@@ -64,7 +64,26 @@ def filter_logs(raw_logs: str) -> str:
     if in_group:
         processed_lines.extend(group_buffer)
 
-    return "\n".join(processed_lines)
+    # Limit output to a window around errors to avoid massive dumps
+    error_indices = [i for i, line in enumerate(processed_lines) if "##[error]" in line]
+    if not error_indices:
+        return "\n".join(processed_lines)
+
+    keep_indices = set()
+    for idx in error_indices:
+        # Keep 15 lines before and 10 lines after the error
+        for j in range(max(0, idx - 15), min(len(processed_lines), idx + 11)):
+            keep_indices.add(j)
+
+    final_lines = []
+    last_idx = -2
+    for idx in sorted(keep_indices):
+        if idx > last_idx + 1 and last_idx != -2:
+            final_lines.append("...")
+        final_lines.append(processed_lines[idx])
+        last_idx = idx
+
+    return "\n".join(final_lines)
 
 
 def main() -> None:
