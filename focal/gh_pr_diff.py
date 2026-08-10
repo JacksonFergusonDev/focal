@@ -15,7 +15,7 @@ def main() -> None:
             `gh` CLI commands fail to execute.
     """
     if len(sys.argv) != 2:
-        sys.exit("Usage: python -m ai_dev_tools.gh_pr_diff <pr_id>")
+        sys.exit("Usage: python -m focal.gh_pr_diff <pr_id>")
 
     pr_id = sys.argv[1]
 

@@ -153,7 +153,7 @@ def main() -> None:
         SystemExit: If the exact required number of arguments is not provided.
     """
     if len(sys.argv) != 2:
-        sys.exit("Usage: python -m ai_dev_tools.notebook notebook.ipynb")
+        sys.exit("Usage: python -m focal.notebook notebook.ipynb")
 
     sys.stdout.write(notebook_to_llm_text(sys.argv[1]))
 

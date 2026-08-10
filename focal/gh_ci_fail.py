@@ -15,7 +15,7 @@ def main() -> None:
             `gh` CLI commands fail to execute.
     """
     if len(sys.argv) != 2:
-        sys.exit("Usage: python -m ai_dev_tools.gh_ci_fail <run_id>")
+        sys.exit("Usage: python -m focal.gh_ci_fail <run_id>")
 
     run_id = sys.argv[1]
 
