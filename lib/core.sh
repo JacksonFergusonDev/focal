@@ -225,6 +225,8 @@ format_file_for_llm() {
     status_code=10
   elif [[ $ext_lower == "ipynb" ]]; then
     content=$("$PYTHON_EXEC" -m focal.notebook "$file")
+  elif [[ $ext_lower == "pdf" ]]; then
+    content=$("$PYTHON_EXEC" -m focal.pdf "$file")
   elif [[ $ext_lower =~ $FOCAL_NOISE_REGEX ]]; then
     content="[asset/noise file omitted: $file]"
     status_code=11
