@@ -15,11 +15,14 @@ def main() -> None:
         SystemExit: If the incorrect number of arguments is provided or if
             the `gh` CLI command fails.
     """
-    if len(sys.argv) != 3:
-        sys.exit("Usage: python -m focal.gh_release_context <tag_date> <header_ref>")
+    if len(sys.argv) != 4:
+        sys.exit(
+            "Usage: python -m focal.gh_release_context <tag_date> <header_ref> <tag_ref>"
+        )
 
     tag_date = sys.argv[1]
     header_ref = sys.argv[2]
+    tag_ref = sys.argv[3]
 
     # Filter out standard dependency bots at the query level to preserve token bandwidth
     search_query = (
@@ -78,6 +81,46 @@ def main() -> None:
             parts.append("\n**Intent / Description:**")
             parts.append(f"{clean_body}\n")
             parts.append("---\n")
+
+    if tag_ref:
+        git_log_res = subprocess.run(
+            [
+                "git",
+                "log",
+                f"{tag_ref}..HEAD",
+                "--no-merges",
+                "--format=* `%h` - %s (@%an)",
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+        if git_log_res.returncode == 0 and git_log_res.stdout.strip():
+            bot_authors = [
+                "dependabot[bot]",
+                "dependabot",
+                "renovate[bot]",
+                "renovate",
+                "github-actions[bot]",
+                "github-actions",
+            ]
+            commits = []
+            for line in git_log_res.stdout.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                is_bot = False
+                for bot in bot_authors:
+                    if f"(@{bot})" in line or f"(@{bot.replace('[bot]', '')})" in line:
+                        is_bot = True
+                        break
+                if not is_bot:
+                    commits.append(line)
+
+            if commits:
+                parts.append("## Raw Commits\n")
+                parts.extend(commits)
+                parts.append("\n")
 
     sys.stdout.write("\n".join(parts))
 
