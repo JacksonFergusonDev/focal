@@ -1,7 +1,8 @@
-import json
 import re
 import subprocess
 import sys
+
+from focal.utils import run_gh_json
 
 
 def main() -> None:
@@ -30,9 +31,8 @@ def main() -> None:
         "-author:app/renovate -author:dependabot -author:github-actions"
     )
 
-    res = subprocess.run(
+    prs = run_gh_json(
         [
-            "gh",
             "pr",
             "list",
             "--search",
@@ -41,18 +41,8 @@ def main() -> None:
             "number,title,body,author,labels,url",
             "--limit",
             "100",
-        ],
-        capture_output=True,
-        text=True,
+        ]
     )
-
-    if res.returncode != 0:
-        sys.exit(f"Error fetching PRs: {res.stderr}")
-
-    try:
-        prs = json.loads(res.stdout)
-    except json.JSONDecodeError:
-        sys.exit("Error: Failed to parse JSON output from GitHub CLI.")
 
     parts = [f"# Release Context: {header_ref} to HEAD\n"]
 

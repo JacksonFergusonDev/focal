@@ -1,6 +1,7 @@
-import json
 import subprocess
 import sys
+
+from focal.utils import run_gh_json
 
 
 def main() -> None:
@@ -24,15 +25,12 @@ def main() -> None:
     if log_res.returncode != 0:
         sys.exit(f"Error fetching logs: {log_res.stderr}")
 
-    meta_res = subprocess.run(
-        ["gh", "run", "view", run_id, "--json", "name,displayTitle"],
-        capture_output=True,
-        text=True,
+    meta = run_gh_json(
+        ["run", "view", run_id, "--json", "name,displayTitle"], exit_on_error=False
     )
 
     title = f"Run {run_id}"
-    if meta_res.returncode == 0:
-        meta = json.loads(meta_res.stdout)
+    if meta:
         title = f"{meta.get('name', 'CI')} - {meta.get('displayTitle', '')}"
 
     print(f"# CI Failure Context: {title}\n")

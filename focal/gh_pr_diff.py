@@ -1,6 +1,7 @@
-import json
 import subprocess
 import sys
+
+from focal.utils import run_gh_json
 
 
 def main() -> None:
@@ -18,15 +19,7 @@ def main() -> None:
 
     pr_id = sys.argv[1]
 
-    meta_res = subprocess.run(
-        ["gh", "pr", "view", pr_id, "--json", "title,body,url"],
-        capture_output=True,
-        text=True,
-    )
-    if meta_res.returncode != 0:
-        sys.exit(f"Error fetching PR metadata: {meta_res.stderr}")
-
-    data = json.loads(meta_res.stdout)
+    data = run_gh_json(["pr", "view", pr_id, "--json", "title,body,url"])
 
     diff_res = subprocess.run(
         ["gh", "pr", "diff", pr_id], capture_output=True, text=True

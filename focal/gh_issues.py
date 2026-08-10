@@ -1,6 +1,6 @@
-import json
-import subprocess
 import sys
+
+from focal.utils import run_gh_json
 
 
 def process_issue(issue_id: str) -> str:
@@ -18,16 +18,12 @@ def process_issue(issue_id: str) -> str:
         A markdown string with the issue title, URL, description, and
         comments. Returns an empty string on failure.
     """
-    res = subprocess.run(
-        ["gh", "issue", "view", issue_id, "--json", "title,body,comments,url"],
-        capture_output=True,
-        text=True,
+    data = run_gh_json(
+        ["issue", "view", issue_id, "--json", "title,body,comments,url"],
+        exit_on_error=False,
     )
-    if res.returncode != 0:
-        print(f"Error fetching issue {issue_id}: {res.stderr}", file=sys.stderr)
+    if not data:
         return ""
-
-    data = json.loads(res.stdout)
 
     parts = [f"# Issue #{issue_id}: {data.get('title', 'Unknown')}"]
     parts.append(f"URL: {data.get('url', '')}\n")
