@@ -68,7 +68,7 @@ def main() -> None:
 
             # Extract body and strip out hidden HTML comments
             raw_body = pr.get("body") or "*No description provided.*"
-            clean_body = re.sub(r"", "", raw_body, flags=re.DOTALL).strip()
+            clean_body = re.sub(r"<!--.*?-->", "", raw_body, flags=re.DOTALL).strip()
 
             if not clean_body:
                 clean_body = "*No description provided.*"
