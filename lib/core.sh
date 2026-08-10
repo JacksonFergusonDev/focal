@@ -63,6 +63,53 @@ require_cmd() {
   fi
 }
 
+# ANSI Formatting (Stderr only for pipeline safety)
+if [ -t 2 ]; then
+  BOLD="\033[1m"
+  DIM="\033[2m"
+  CYAN="\033[36m"
+  GREEN="\033[32m"
+  RESET="\033[0m"
+else
+  BOLD=""
+  DIM=""
+  CYAN=""
+  GREEN=""
+  RESET=""
+fi
+
+status_info() {
+  printf "${CYAN}info:${RESET} %s\n" "$1" >&2
+}
+
+status_add() {
+  printf "${GREEN}added:${RESET} %s\n" "$1" >&2
+}
+
+status_skip() {
+  printf "${DIM}skipped:${RESET} %s\n" "$1" >&2
+}
+
+status_done() {
+  printf "${BOLD}${GREEN}done:${RESET} %s\n" "$1" >&2
+}
+
+print_subcommand_help() {
+  local cmd="$1"
+  local desc="$2"
+  local usage="$3"
+  shift 3
+
+  printf "${BOLD}Usage:${RESET} focal %s %s\n" "${cmd}" "${usage}"
+  printf "%s\n\n" "${desc}"
+  if [ $# -gt 0 ]; then
+    printf "${BOLD}Options:${RESET}\n"
+    for opt in "$@"; do
+      printf "  %s\n" "${opt}"
+    done
+  fi
+}
+
 require_gh_auth() {
   require_cmd "gh"
   if ! gh auth status >/dev/null 2>&1; then
@@ -124,10 +171,14 @@ output_and_copy() {
   local success_msg="${base_msg} (~${approx_tokens} tokens)"
 
   # Check if the array has elements
-  if [ ${#clip_cmd[@]} -gt 0 ]; then
+  if [ ! -t 1 ]; then
+    # Stdout is redirected or piped. Skip clipboard entirely.
+    printf "%s" "$payload"
+    status_done "$success_msg"
+  elif [ ${#clip_cmd[@]} -gt 0 ]; then
     # Use %s to prevent escape sequence expansion
     printf "%s" "$payload" | "${clip_cmd[@]}"
-    echo "$success_msg"
+    status_done "$success_msg"
   else
     echo >&2 "focal: No clipboard manager detected. Dumping to stdout..."
     printf "%s" "$payload"

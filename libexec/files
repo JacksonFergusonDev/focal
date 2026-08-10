@@ -6,21 +6,66 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 source "${SCRIPT_DIR}/../lib/core.sh"
 
-# 1. Determine input method (Globbing vs Interactive)
-if [ $# -gt 0 ]; then
-  # User passed files directly: focal files libexec/*.py
-  # We use printf to convert the bash array of arguments into a newline-separated string
-  files=$(printf "%s\n" "$@")
-else
-  require_cmd "fzf"
-  require_cmd "bat"
-  require_cmd "fd"
-
-  # Interactive mode
-  files=$(interactive_file_select "Files: " -m --header "TAB: multi-select | CTRL-A: select all | ENTER: confirm")
+# Parse flags
+mode="interactive"
+if [[ $# -gt 0 ]]; then
+  case "$1" in
+    -h | --help)
+      print_subcommand_help "files" \
+        "Extracts and formats the contents of one or more files for LLM prompting." \
+        "[files...] | [flags]" \
+        "-a, --all        Extract all valid non-noise files in the repository." \
+        "-s, --staged     Extract all files currently staged in git." \
+        "-m, --modified   Extract all files with uncommitted changes in the working tree."
+      exit 0
+      ;;
+    -a | --all)
+      mode="all"
+      ;;
+    -s | --staged)
+      mode="staged"
+      ;;
+    -m | --modified)
+      mode="modified"
+      ;;
+    *)
+      mode="direct"
+      ;;
+  esac
 fi
 
-[ -z "$files" ] && exit 0
+files=""
+case "$mode" in
+  all)
+    require_cmd "fd"
+    status_info "Discovering all valid files..."
+    files=$(fd --type f --hidden --exclude .git "${FD_NOISE_FLAGS[@]}")
+    ;;
+  staged)
+    require_cmd "git"
+    status_info "Discovering staged files..."
+    files=$(git diff --name-only --cached --diff-filter=d)
+    ;;
+  modified)
+    require_cmd "git"
+    status_info "Discovering modified files..."
+    files=$(git ls-files -m)
+    ;;
+  direct)
+    files=$(printf "%s\n" "$@")
+    ;;
+  interactive)
+    require_cmd "fzf"
+    require_cmd "bat"
+    require_cmd "fd"
+    files=$(interactive_file_select "Files: " -m --header "TAB: multi-select | CTRL-A: select all | ENTER: confirm")
+    ;;
+esac
+
+[ -z "$files" ] && {
+  status_info "No files selected."
+  exit 0
+}
 
 # 2. Process Files
 buffer=""
@@ -42,24 +87,24 @@ while IFS= read -r file; do
   # Tally and log file states based on out-of-band signals
   case $status_code in
     11)
-      echo "Skipped noise/binary: $file"
+      status_skip "noise/binary: $file"
       skipped_count=$((skipped_count + 1))
       ;;
     12)
-      echo "Added (truncated): $file"
+      status_add "(truncated): $file"
       truncated_count=$((truncated_count + 1))
       ;;
     10)
-      echo "Added (empty): $file"
+      status_add "(empty): $file"
       empty_count=$((empty_count + 1))
       ;;
     0)
-      echo "Added $file"
+      status_add "$file"
       added_count=$((added_count + 1))
       ;;
     *)
       # Failsafe for unexpected errors
-      echo "Added $file"
+      status_add "$file"
       added_count=$((added_count + 1))
       ;;
   esac
@@ -70,10 +115,12 @@ output_and_copy "$buffer" "Copied context"
 
 # 3. Print Summary Report
 if [ "$skipped_count" -gt 0 ] || [ "$truncated_count" -gt 0 ] || [ "$empty_count" -gt 0 ]; then
-  echo ""
-  echo "--- Extraction Summary ---"
-  echo "Added fully: $added_count files"
-  [ "$empty_count" -gt 0 ] && echo "Added empty: $empty_count files"
-  [ "$truncated_count" -gt 0 ] && echo "Truncated (>1500 lines): $truncated_count files"
-  [ "$skipped_count" -gt 0 ] && echo "Skipped (noise/binary): $skipped_count files"
+  echo "" >&2
+  echo "--- Extraction Summary ---" >&2
+  echo "Added fully: $added_count files" >&2
+  [ "$empty_count" -gt 0 ] && echo "Added empty: $empty_count files" >&2
+  [ "$truncated_count" -gt 0 ] && echo "Truncated (>1500 lines): $truncated_count files" >&2
+  [ "$skipped_count" -gt 0 ] && echo "Skipped (noise/binary): $skipped_count files" >&2
 fi
+
+exit 0
