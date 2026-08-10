@@ -12,10 +12,20 @@ require_cmd "git"
 diff_args=("-M")
 target_name="working tree"
 mode="unstaged"
+thick_mode=false
 
 # Parse basic flags
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    -h | --help)
+      print_subcommand_help "diff" \
+        "Copies a formatted git diff of uncommitted, staged, or all changes." \
+        "[flags] [--] [path...]" \
+        "--staged, --cached   Diff staged changes only." \
+        "-a, --all            Diff all changes (staged and unstaged) against HEAD." \
+        "--thick              Include the repository tree and full source code of modified files."
+      exit 0
+      ;;
     --staged | --cached)
       mode="staged"
       target_name="staged changes"
@@ -24,6 +34,10 @@ while [[ $# -gt 0 ]]; do
     --all | -a)
       mode="all"
       target_name="all changes"
+      shift
+      ;;
+    --thick)
+      thick_mode=true
       shift
       ;;
     *)
@@ -126,7 +140,41 @@ if [ -n "$diff_output" ]; then
   buffer+="### Diff
 \`\`\`diff
 ${diff_output}
-\`\`\`"
+\`\`\`
+
+"
+fi
+
+if $thick_mode; then
+  buffer+="### Macroscopic Map
+\`\`\`text
+$(generate_repo_tree)
+\`\`\`
+
+### Contextual Grounding
+"
+  status_info "Generating thick diff contextual grounding..."
+
+  modified_files=""
+  if [ "$mode" == "staged" ]; then
+    modified_files=$(git diff --staged --name-only --diff-filter=d "${diff_args[@]}")
+  elif [ "$mode" == "unstaged" ]; then
+    modified_files=$(git diff --name-only --diff-filter=d "${diff_args[@]}")
+  elif [ "$mode" == "all" ]; then
+    modified_files=$(git diff "$head_ref" --name-only --diff-filter=d "${diff_args[@]}")
+    if $has_untracked; then
+      for file in $untracked_files; do
+        modified_files+=$'\n'"$file"
+      done
+    fi
+  fi
+
+  while IFS= read -r file; do
+    if [ -z "$file" ] || [ ! -f "$file" ]; then
+      continue
+    fi
+    buffer+="$(format_file_for_llm "$file")" || true
+  done <<<"$modified_files"
 fi
 
 output_and_copy "$buffer" "Copied diff of $target_name"

@@ -7,9 +7,28 @@ SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 source "${SCRIPT_DIR}/../lib/core.sh"
 
 require_cmd "git"
-require_cmd "fzf"
-require_cmd "bat"
 require_cmd "fd"
+
+# Parse flags
+mode="interactive"
+if [[ $# -gt 0 ]]; then
+  case "$1" in
+    -h | --help)
+      print_subcommand_help "context" \
+        "Generates a project context summary including repo tree, git status, and core manifests." \
+        "[flags]" \
+        "-c, --core       Extract core context only (tree, status, manifests) bypassing prompt." \
+        "-a, --all        Extract core context and automatically append all valid files."
+      exit 0
+      ;;
+    -c | --core)
+      mode="core"
+      ;;
+    -a | --all)
+      mode="all"
+      ;;
+  esac
+fi
 
 # 1. Resolve which core context files actually exist in the repo
 core_files=("README.md" "pyproject.toml" "package.json" "requirements.txt" "CONTRIBUTING.md" "Cargo.toml")
@@ -21,20 +40,34 @@ for f in "${core_files[@]}"; do
   fi
 done
 
-# 2. Configure the fzf interface
-header="TAB: multi-select | CTRL-A: select all"
+# 2. Determine additional files
+additional_files=""
 
-if [ "${#existing_core_files[@]}" -gt 0 ]; then
-  # Join existing files with a comma and space using printf (Bash 3.2 compatible)
-  joined_files=$(printf ", %s" "${existing_core_files[@]}")
-  joined_files="${joined_files:2}" # Strip the leading comma and space
-  header+=$'\n'"Auto-included: ${joined_files}"
+if [ "$mode" == "interactive" ]; then
+  require_cmd "fzf"
+  require_cmd "bat"
+
+  header="TAB: multi-select | CTRL-A: select all"
+
+  if [ "${#existing_core_files[@]}" -gt 0 ]; then
+    # Join existing files with a comma and space using printf (Bash 3.2 compatible)
+    joined_files=$(printf ", %s" "${existing_core_files[@]}")
+    joined_files="${joined_files:2}" # Strip the leading comma and space
+    header+=$'\n'"Auto-included: ${joined_files}"
+  fi
+
+  # Pass the existing files to core.sh to hide them from the fd search stream
+  FOCAL_EXCLUDE_FILES=("${existing_core_files[@]}")
+
+  additional_files=$(interactive_file_select "Additional files: " -m --header "$header")
+elif [ "$mode" == "all" ]; then
+  status_info "Discovering all valid files..."
+  extra_fd_args=()
+  for excl in "${existing_core_files[@]}"; do
+    extra_fd_args+=("--exclude" "$excl")
+  done
+  additional_files=$(fd --type f --hidden --exclude .git "${FD_NOISE_FLAGS[@]}" "${extra_fd_args[@]}")
 fi
-
-# Pass the existing files to core.sh to hide them from the fd search stream
-FOCAL_EXCLUDE_FILES=("${existing_core_files[@]}")
-
-additional_files=$(interactive_file_select "Additional files: " -m --header "$header")
 
 # 3. Inject Repository Tree and Status
 buffer="# Repository Tree"$'\n```text\n'
