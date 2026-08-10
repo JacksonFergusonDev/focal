@@ -13,6 +13,9 @@ def filter_logs(raw_logs: str) -> str:
     # e.g., 'Job Name\tStep Name\t2026-08-10T19:09:40.6560982Z '
     prefix_pattern = re.compile(r"^.*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\s?")
 
+    # Regex to match ANSI escape codes
+    ansi_escape = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+
     in_group = False
     group_name = ""
     group_buffer = []
@@ -27,8 +30,9 @@ def filter_logs(raw_logs: str) -> str:
     ]
 
     for line in raw_logs.splitlines():
-        # Strip the prefix
+        # Strip the prefix and ANSI codes
         clean_line = prefix_pattern.sub("", line)
+        clean_line = ansi_escape.sub("", clean_line)
 
         # Skip known boilerplate lines if they are not in a failed group context
         # (Actually, it's safe to just skip them entirely to reduce noise)

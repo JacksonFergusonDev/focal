@@ -107,3 +107,8 @@ def test_gh_ci_fail_filter_logs():
     assert "Line 30" not in result
     assert "Line 35" in result
     assert "Line 59" in result
+
+    # Test 6: Stripping ANSI escape codes
+    raw_logs = "Job Name\tStep Name\t2026-08-10T19:09:40.125Z \x1b[34m==>\x1b[0m \x1b[1mHomebrew is cool\x1b[0m"
+    expected = "==> Homebrew is cool"
+    assert filter_logs(raw_logs) == expected
