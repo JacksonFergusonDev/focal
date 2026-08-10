@@ -13,10 +13,43 @@ def filter_logs(raw_logs: str) -> str:
     # e.g., 'Job Name\tStep Name\t2026-08-10T19:09:40.6560982Z '
     prefix_pattern = re.compile(r"^.*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\s?")
 
+    in_group = False
+    group_name = ""
+    group_buffer = []
+    group_has_error = False
+
     for line in raw_logs.splitlines():
         # Strip the prefix
         clean_line = prefix_pattern.sub("", line)
-        processed_lines.append(clean_line)
+
+        if clean_line.startswith("##[group]"):
+            in_group = True
+            group_name = clean_line[len("##[group]") :]
+            group_buffer = [clean_line]
+            group_has_error = False
+        elif clean_line.startswith("##[endgroup]"):
+            if in_group:
+                group_buffer.append(clean_line)
+                if group_has_error:
+                    processed_lines.extend(group_buffer)
+                else:
+                    processed_lines.append(
+                        f"> [Group completed successfully: {group_name}]"
+                    )
+                in_group = False
+                group_buffer = []
+            else:
+                processed_lines.append(clean_line)
+        elif in_group:
+            group_buffer.append(clean_line)
+            if "##[error]" in clean_line:
+                group_has_error = True
+        else:
+            processed_lines.append(clean_line)
+
+    # If a group didn't close properly, append its buffer
+    if in_group:
+        processed_lines.extend(group_buffer)
 
     return "\n".join(processed_lines)
 

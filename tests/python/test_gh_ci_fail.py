@@ -59,6 +59,25 @@ def test_gh_ci_fail_main_log_failure():
 def test_gh_ci_fail_filter_logs():
     from focal.gh_ci_fail import filter_logs
 
-    raw_logs = "Job Name\tStep Name\t2026-08-10T19:09:40.6560982Z ##[group]Runner Image Provisioner\nJob Name\tStep Name\t2026-08-10T19:09:40.6587434Z Some logs"
-    expected = "##[group]Runner Image Provisioner\nSome logs"
+    # Test 1: Simple prefix stripping
+    raw_logs = "Job Name\tStep Name\t2026-08-10T19:09:40.6560982Z Some logs"
+    expected = "Some logs"
+    assert filter_logs(raw_logs) == expected
+
+    # Test 2: Collapsing successful group
+    raw_logs = (
+        "Job Name\tStep Name\t2026-08-10T19:09:40.123Z ##[group]Runner Image Provisioner\n"
+        "Job Name\tStep Name\t2026-08-10T19:09:40.124Z doing things\n"
+        "Job Name\tStep Name\t2026-08-10T19:09:40.125Z ##[endgroup]"
+    )
+    expected = "> [Group completed successfully: Runner Image Provisioner]"
+    assert filter_logs(raw_logs) == expected
+
+    # Test 3: Keeping failed group
+    raw_logs = (
+        "Job Name\tStep Name\t2026-08-10T19:09:40.123Z ##[group]Build Project\n"
+        "Job Name\tStep Name\t2026-08-10T19:09:40.124Z ##[error]Process completed with exit code 1.\n"
+        "Job Name\tStep Name\t2026-08-10T19:09:40.125Z ##[endgroup]"
+    )
+    expected = "##[group]Build Project\n##[error]Process completed with exit code 1.\n##[endgroup]"
     assert filter_logs(raw_logs) == expected
