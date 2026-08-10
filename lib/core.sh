@@ -203,7 +203,7 @@ interactive_file_select() {
     done
   fi
 
-  fd --type f --hidden --exclude .git "${FD_NOISE_FLAGS[@]}" "${extra_fd_args[@]}" | fzf "${fzf_args[@]}" \
+  fd --type f --hidden --exclude .git "${extra_fd_args[@]}" | fzf "${fzf_args[@]}" \
     --prompt="$prompt" \
     --bind "ctrl-a:select-all,ctrl-d:deselect-all" \
     --preview "${REPO_ROOT}/lib/preview.sh {}" || true
