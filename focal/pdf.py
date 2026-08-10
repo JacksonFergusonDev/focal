@@ -1,3 +1,5 @@
+"""Extracts text content from PDF documents for LLM context generation."""
+
 import sys
 
 import pdfplumber
@@ -13,10 +15,10 @@ def pdf_to_llm_text(path: str) -> str:
     Includes safeguards to prevent massive documents from exceeding context windows.
 
     Args:
-        path (str): The file system path to the target `.pdf` file.
+        path: The file system path to the target `.pdf` file.
 
     Returns:
-        str: The extracted text representation of the PDF.
+        The extracted text representation of the PDF.
     """
     try:
         with pdfplumber.open(path) as pdf:

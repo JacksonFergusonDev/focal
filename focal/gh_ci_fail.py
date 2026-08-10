@@ -1,3 +1,5 @@
+"""Extracts and formats failed GitHub Actions CI logs into markdown for LLM consumption."""
+
 import re
 import subprocess
 import sys
@@ -6,7 +8,17 @@ from focal.utils import run_gh_json
 
 
 def filter_logs(raw_logs: str) -> str:
-    """Processes raw GitHub Actions logs to remove noise."""
+    """Processes raw GitHub Actions logs to remove noise.
+
+    Strips log prefixes, ANSI escape sequences, and successful output groups,
+    retaining context around lines containing errors.
+
+    Args:
+        raw_logs: The raw text logs from a GitHub Actions run.
+
+    Returns:
+        The filtered, markdown-ready log text focused on error occurrences.
+    """
     processed_lines = []
 
     # Regex to match the GitHub Actions prefix:

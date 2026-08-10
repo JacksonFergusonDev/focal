@@ -1,3 +1,5 @@
+"""Utility functions for executing GitHub CLI commands and parsing output."""
+
 import json
 import subprocess
 import sys

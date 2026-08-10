@@ -1,3 +1,5 @@
+"""Fetches and formats GitHub issues and discussion threads into markdown."""
+
 import sys
 
 from focal.utils import run_gh_json

@@ -1,3 +1,5 @@
+"""Parses Jupyter notebook (.ipynb) files into clean, LLM-optimized markdown representations."""
+
 import json
 import sys
 
@@ -11,10 +13,10 @@ def join_text(x: list[str] | str | None) -> str:
     lists of strings. This function safely concatenates them.
 
     Args:
-        x (list[str] | str | None): The text field payload from the notebook cell.
+        x: The text field payload from the notebook cell.
 
     Returns:
-        str: The concatenated string, or an empty string if the input is None.
+        The concatenated string, or an empty string if the input is None.
     """
     if isinstance(x, list):
         return "".join(x)
@@ -25,11 +27,11 @@ def truncate(text: str) -> str:
     """Truncates text to prevent context window overflow.
 
     Args:
-        text (str): The raw output string to be evaluated.
+        text: The raw output string to be evaluated.
 
     Returns:
-        str: The original string if its length is within `MAX_OUTPUT_CHARS`,
-            otherwise a truncated slice appended with an omission notice.
+        The original string if its length is within `MAX_OUTPUT_CHARS`,
+        otherwise a truncated slice appended with an omission notice.
     """
     if len(text) > MAX_OUTPUT_CHARS:
         return text[:MAX_OUTPUT_CHARS] + "\n...[output truncated]"
@@ -43,11 +45,11 @@ def render_output(out: dict) -> str | None:
     while explicitly omitting binary/image data types.
 
     Args:
-        out (dict): A single output payload from a Jupyter notebook code cell.
+        out: A single output payload from a Jupyter notebook code cell.
 
     Returns:
-        str | None: A formatted markdown string representing the cell output,
-            or None if the output type is unsupported or completely empty.
+        A formatted markdown string representing the cell output, or None if the
+        output type is unsupported or completely empty.
     """
     ot = out.get("output_type")
 
@@ -94,10 +96,10 @@ def notebook_to_llm_text(path: str) -> str:
     standard markdown blocks.
 
     Args:
-        path (str): The file system path to the target `.ipynb` file.
+        path: The file system path to the target `.ipynb` file.
 
     Returns:
-        str: The complete formatted markdown representation of the notebook.
+        The complete formatted markdown representation of the notebook.
     """
     with open(path, encoding="utf-8") as f:
         nb = json.load(f)

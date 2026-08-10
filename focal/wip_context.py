@@ -1,3 +1,5 @@
+"""Gathers branch topology, commit history, file stats, and diffs for work-in-progress Git branches."""
+
 import subprocess
 import sys
 from pathlib import Path
@@ -70,11 +72,11 @@ def run_git(args: list[str], check: bool = True) -> tuple[int, str]:
     """Executes a Git command and returns its exit code and standard output.
 
     Args:
-        args (list[str]): The Git subcommand and its arguments.
-        check (bool): If True, exits the program if the Git command fails.
+        args: The Git subcommand and its arguments.
+        check: If True, exits the program if the Git command fails.
 
     Returns:
-        tuple[int, str]: The return code and the stripped standard output.
+        The return code and the stripped standard output.
 
     Raises:
         SystemExit: If the Git command fails and `check` is True.
@@ -99,10 +101,10 @@ def resolve_base_branch(target: str | None) -> str:
     of 'main', 'master', and 'develop'.
 
     Args:
-        target (str | None): A user-specified branch name, or None.
+        target: A user-specified branch name, or None.
 
     Returns:
-        str: The resolved branch name.
+        The resolved branch name.
 
     Raises:
         SystemExit: If no branch is provided and standard defaults are not found.
@@ -137,10 +139,10 @@ def is_priority(filepath: str) -> bool:
     or within the core `.github/` configuration directory.
 
     Args:
-        filepath (str): The relative path to the file in the repository.
+        filepath: The relative path to the file in the repository.
 
     Returns:
-        bool: True if the file is priority, False otherwise.
+        True if the file is priority, False otherwise.
     """
     if "/" not in filepath:
         return True
@@ -151,10 +153,10 @@ def is_noise(filepath: str) -> bool:
     """Determines if a file should be excluded from the text diff.
 
     Args:
-        filepath (str): The relative path to the file.
+        filepath: The relative path to the file.
 
     Returns:
-        bool: True if the file matches known noise patterns, False otherwise.
+        True if the file matches known noise patterns, False otherwise.
     """
     path = Path(filepath)
     if path.name in NOISE_FILES:
@@ -168,13 +170,13 @@ def get_diff_for_files(
     """Fetches Git diffs for a list of files up to a character limit.
 
     Args:
-        base (str): The base commit hash to compare against.
-        files (list[str]): The list of file paths to diff.
-        chars_remaining (int): The maximum number of characters allowed for the output.
+        base: The base commit hash to compare against.
+        files: The list of file paths to diff.
+        chars_remaining: The maximum number of characters allowed for the output.
 
     Returns:
-        tuple[list[str], int, int]: The list of formatted diff strings,
-            the updated remaining character count, and the number of omitted files.
+        The list of formatted diff strings, the updated remaining character count,
+        and the number of omitted files.
     """
     diff_blocks = []
     omitted_count = 0

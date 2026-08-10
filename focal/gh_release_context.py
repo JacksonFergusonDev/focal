@@ -1,3 +1,5 @@
+"""Collects merged pull requests and git commit histories between release tags."""
+
 import re
 import subprocess
 import sys

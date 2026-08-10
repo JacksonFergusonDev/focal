@@ -1,3 +1,5 @@
+"""Fetches and formats GitHub Pull Request descriptions and diffs into markdown."""
+
 import subprocess
 import sys
 

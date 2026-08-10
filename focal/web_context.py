@@ -1,3 +1,5 @@
+"""Fetches and converts web pages or raw HTML input into clean markdown."""
+
 import re
 import sys
 import urllib.error
@@ -8,7 +10,15 @@ from markdownify import markdownify
 
 
 def parse_html_to_md(html: str, source_label: str) -> str:
-    """Strips noisy DOM elements from HTML and returns clean Markdown."""
+    """Strips noisy DOM elements from HTML and returns clean Markdown.
+
+    Args:
+        html: Raw HTML content string.
+        source_label: A label or URL identifying the source of the HTML.
+
+    Returns:
+        A markdown representation of the cleaned HTML page content.
+    """
     soup = BeautifulSoup(html, "html.parser")
 
     # Only strip tags that are explicitly designed for non-content or execution
@@ -38,7 +48,17 @@ def parse_html_to_md(html: str, source_label: str) -> str:
 
 
 def fetch_url(url: str) -> str:
-    """Fetches raw HTML from a public URL."""
+    """Fetches raw HTML from a public URL.
+
+    Args:
+        url: The web URL to retrieve.
+
+    Returns:
+        The decoded HTML string fetched from the URL.
+
+    Raises:
+        SystemExit: If an HTTP error or network failure occurs.
+    """
     req = urllib.request.Request(
         url,
         headers={
