@@ -1,6 +1,7 @@
-import json
 import subprocess
 import sys
+
+from focal.utils import run_gh_json
 
 
 def main() -> None:
@@ -14,7 +15,7 @@ def main() -> None:
             `gh` CLI commands fail to execute.
     """
     if len(sys.argv) != 2:
-        sys.exit("Usage: python -m ai_dev_tools.gh_ci_fail <run_id>")
+        sys.exit("Usage: python -m focal.gh_ci_fail <run_id>")
 
     run_id = sys.argv[1]
 
@@ -24,16 +25,13 @@ def main() -> None:
     if log_res.returncode != 0:
         sys.exit(f"Error fetching logs: {log_res.stderr}")
 
-    meta_res = subprocess.run(
-        ["gh", "run", "view", run_id, "--json", "name,displayTitle"],
-        capture_output=True,
-        text=True,
+    meta = run_gh_json(
+        ["run", "view", run_id, "--json", "name,displayTitle"], exit_on_error=False
     )
 
     title = f"Run {run_id}"
-    if meta_res.returncode == 0:
-        meta = json.loads(meta_res.stdout)
-        title = f"{meta.get('name', 'CI')} - {meta.get('displayTitle', '')}"
+    if meta:
+        title = f"{meta.get('name') or 'CI'} - {meta.get('displayTitle') or ''}"
 
     print(f"# CI Failure Context: {title}\n")
     print(f"```text\n[error logs]\n{log_res.stdout.strip()}\n```")

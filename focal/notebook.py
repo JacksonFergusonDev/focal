@@ -75,7 +75,7 @@ def render_output(out: dict) -> str | None:
     if ot in {"display_data", "execute_result"}:
         data = out.get("data", {})
 
-        if "image/png" in data or "image/jpeg" in data:
+        if any(k.startswith("image/") for k in data):
             return "[image output omitted]"
 
         text = truncate(join_text(data.get("text/plain", "")))
@@ -153,7 +153,7 @@ def main() -> None:
         SystemExit: If the exact required number of arguments is not provided.
     """
     if len(sys.argv) != 2:
-        sys.exit("Usage: python -m ai_dev_tools.notebook notebook.ipynb")
+        sys.exit("Usage: python -m focal.notebook notebook.ipynb")
 
     sys.stdout.write(notebook_to_llm_text(sys.argv[1]))
 
