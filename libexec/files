@@ -39,7 +39,7 @@ case "$mode" in
   all)
     require_cmd "fd"
     status_info "Discovering all valid files..."
-    files=$(fd --type f --hidden --exclude .git "${FD_NOISE_FLAGS[@]}")
+    files=$(fd --type f --hidden --exclude .git)
     ;;
   staged)
     require_cmd "git"

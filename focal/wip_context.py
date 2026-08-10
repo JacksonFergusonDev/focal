@@ -1,5 +1,6 @@
 """Gathers branch topology, commit history, file stats, and diffs for work-in-progress Git branches."""
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -315,9 +316,23 @@ def main() -> None:
     )
 
     if omitted_files:
-        parts.append(
-            f"*Note: Diffs for {len(omitted_files)} noise/binary files were explicitly excluded.*"
-        )
+        parts.append("\n## 4. Omitted Files Metadata")
+        for f in omitted_files:
+            try:
+                size_bytes = os.path.getsize(f)
+                if size_bytes < 1024:
+                    size_str = f"{size_bytes}B"
+                elif size_bytes < 1024 * 1024:
+                    size_str = f"{size_bytes / 1024:.1f}K"
+                else:
+                    size_str = f"{size_bytes / (1024 * 1024):.1f}M"
+
+                res = subprocess.run(["file", "-b", f], capture_output=True, text=True)
+                meta = res.stdout.strip() if res.returncode == 0 else "Unknown"
+
+                parts.append(f"- `{f}` (Size: {size_str})\n  - Type: {meta}")
+            except Exception:
+                parts.append(f"- `{f}` (Deleted or inaccessible)")
 
     if diff_output:
         parts.extend(diff_output)
