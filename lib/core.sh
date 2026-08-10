@@ -228,14 +228,22 @@ format_file_for_llm() {
   elif [[ $ext_lower == "pdf" ]]; then
     content=$("$PYTHON_EXEC" -m focal.pdf "$file")
   elif [[ $ext_lower =~ $FOCAL_NOISE_REGEX ]]; then
-    content="[asset/noise file omitted: $file]"
+    local size
+    size=$(ls -lh "$file" | awk '{print $5}')
+    local meta
+    meta=$(file -b "$file" 2>/dev/null || echo "Unknown")
+    content="[asset/noise file omitted: $file]"$'\n'"Size: $size"$'\n'"Metadata: $meta"
     status_code=11
   else
     local mime_enc
     mime_enc=$(file -b --mime-encoding "$file" 2>/dev/null || echo "binary")
 
     if [[ $mime_enc == "binary" ]]; then
-      content="[binary file omitted: $file]"
+      local size
+      size=$(ls -lh "$file" | awk '{print $5}')
+      local meta
+      meta=$(file -b "$file" 2>/dev/null || echo "Unknown")
+      content="[binary file omitted: $file]"$'\n'"Size: $size"$'\n'"Metadata: $meta"
       status_code=11
     else
       # Global Text Failsafe
