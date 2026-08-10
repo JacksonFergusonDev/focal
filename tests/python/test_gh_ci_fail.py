@@ -81,3 +81,12 @@ def test_gh_ci_fail_filter_logs():
     )
     expected = "##[group]Build Project\n##[error]Process completed with exit code 1.\n##[endgroup]"
     assert filter_logs(raw_logs) == expected
+
+    # Test 4: Ignoring boilerplate
+    raw_logs = (
+        "Job Name\tStep Name\t2026-08-10T19:09:40.123Z Download action repository 'actions/checkout'\n"
+        "Job Name\tStep Name\t2026-08-10T19:09:40.124Z Secret source: Actions\n"
+        "Job Name\tStep Name\t2026-08-10T19:09:40.125Z Real error log"
+    )
+    expected = "Real error log"
+    assert filter_logs(raw_logs) == expected

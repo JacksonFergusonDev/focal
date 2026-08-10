@@ -18,9 +18,22 @@ def filter_logs(raw_logs: str) -> str:
     group_buffer = []
     group_has_error = False
 
+    ignored_substrings = [
+        "Download action repository",
+        "Secret source: Actions",
+        "Prepare workflow directory",
+        "Getting action download info",
+        "Complete job name:",
+    ]
+
     for line in raw_logs.splitlines():
         # Strip the prefix
         clean_line = prefix_pattern.sub("", line)
+
+        # Skip known boilerplate lines if they are not in a failed group context
+        # (Actually, it's safe to just skip them entirely to reduce noise)
+        if any(ignored in clean_line for ignored in ignored_substrings):
+            continue
 
         if clean_line.startswith("##[group]"):
             in_group = True
