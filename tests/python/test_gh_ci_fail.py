@@ -54,3 +54,11 @@ def test_gh_ci_fail_main_log_failure():
             main()
 
         assert "Error fetching logs: api error" in str(exc_info.value)
+
+
+def test_gh_ci_fail_filter_logs():
+    from focal.gh_ci_fail import filter_logs
+
+    raw_logs = "Job Name\tStep Name\t2026-08-10T19:09:40.6560982Z ##[group]Runner Image Provisioner\nJob Name\tStep Name\t2026-08-10T19:09:40.6587434Z Some logs"
+    expected = "##[group]Runner Image Provisioner\nSome logs"
+    assert filter_logs(raw_logs) == expected

@@ -1,7 +1,24 @@
+import re
 import subprocess
 import sys
 
 from focal.utils import run_gh_json
+
+
+def filter_logs(raw_logs: str) -> str:
+    """Processes raw GitHub Actions logs to remove noise."""
+    processed_lines = []
+
+    # Regex to match the GitHub Actions prefix:
+    # e.g., 'Job Name\tStep Name\t2026-08-10T19:09:40.6560982Z '
+    prefix_pattern = re.compile(r"^.*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\s?")
+
+    for line in raw_logs.splitlines():
+        # Strip the prefix
+        clean_line = prefix_pattern.sub("", line)
+        processed_lines.append(clean_line)
+
+    return "\n".join(processed_lines)
 
 
 def main() -> None:
@@ -34,7 +51,9 @@ def main() -> None:
         title = f"{meta.get('name') or 'CI'} - {meta.get('displayTitle') or ''}"
 
     print(f"# CI Failure Context: {title}\n")
-    print(f"```text\n[error logs]\n{log_res.stdout.strip()}\n```")
+
+    filtered_logs = filter_logs(log_res.stdout)
+    print(f"```text\n[error logs]\n{filtered_logs.strip()}\n```")
 
 
 if __name__ == "__main__":
