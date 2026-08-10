@@ -1,6 +1,6 @@
 [project]
 name = "focal"
-version = "0.2.0"
+version = "0.3.0"
 description = "CLI tool for instantly extracting clean, token-efficient codebase context, diffs, and CI logs for LLM workflows."
 readme = "README.md"
 requires-python = ">=3.10"
