@@ -25,6 +25,12 @@ if [[ $EXT == "ipynb" ]]; then
   exit 0
 fi
 
+# 4. Parse PDFs
+if [[ $EXT == "pdf" ]]; then
+  "$PYTHON_EXEC" -m focal.pdf "$TARGET" 2>/dev/null | bat --language=markdown --style=numbers --color=always
+  exit 0
+fi
+
 # 3. Detect Binaries
 MIME_ENC=$(file -b --mime-encoding "$TARGET" 2>/dev/null || echo "binary")
 

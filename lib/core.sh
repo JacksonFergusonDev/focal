@@ -12,7 +12,7 @@ FOCAL_NOISE_EXTS=(
   # Compiled/Binary Data
   "parquet" "pkl" "sqlite" "db" "npy" "npz" "h5" "hdf5" "fits" "data" "nc"
   # Media & Assets
-  "svg" "png" "jpg" "jpeg" "gif" "ico" "webp" "pdf" "mp4" "webm" "mov" "avi" "mkv" "mp3" "wav"
+  "svg" "png" "jpg" "jpeg" "gif" "ico" "webp" "mp4" "webm" "mov" "avi" "mkv" "mp3" "wav"
   # Frontend build artifacts
   "min.js" "min.css" "map"
   # Archives, Lockfiles & Compiled
@@ -225,6 +225,8 @@ format_file_for_llm() {
     status_code=10
   elif [[ $ext_lower == "ipynb" ]]; then
     content=$("$PYTHON_EXEC" -m focal.notebook "$file")
+  elif [[ $ext_lower == "pdf" ]]; then
+    content=$("$PYTHON_EXEC" -m focal.pdf "$file")
   elif [[ $ext_lower =~ $FOCAL_NOISE_REGEX ]]; then
     content="[asset/noise file omitted: $file]"
     status_code=11
