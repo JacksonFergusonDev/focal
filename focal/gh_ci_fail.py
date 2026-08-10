@@ -31,7 +31,7 @@ def main() -> None:
 
     title = f"Run {run_id}"
     if meta:
-        title = f"{meta.get('name', 'CI')} - {meta.get('displayTitle', '')}"
+        title = f"{meta.get('name') or 'CI'} - {meta.get('displayTitle') or ''}"
 
     print(f"# CI Failure Context: {title}\n")
     print(f"```text\n[error logs]\n{log_res.stdout.strip()}\n```")

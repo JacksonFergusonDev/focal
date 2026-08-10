@@ -75,7 +75,7 @@ def render_output(out: dict) -> str | None:
     if ot in {"display_data", "execute_result"}:
         data = out.get("data", {})
 
-        if "image/png" in data or "image/jpeg" in data:
+        if any(k.startswith("image/") for k in data):
             return "[image output omitted]"
 
         text = truncate(join_text(data.get("text/plain", "")))
