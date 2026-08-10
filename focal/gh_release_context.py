@@ -16,20 +16,23 @@ def main() -> None:
         SystemExit: If the incorrect number of arguments is provided or if
             the `gh` CLI command fails.
     """
-    if len(sys.argv) != 4:
+    if len(sys.argv) not in (4, 6):
         sys.exit(
-            "Usage: python -m focal.gh_release_context <tag_date> <header_ref> <tag_ref>"
+            "Usage: python -m focal.gh_release_context <tag_date> <header_ref> <tag_ref> [<head_ref> <head_date>]"
         )
 
     tag_date = sys.argv[1]
     header_ref = sys.argv[2]
     tag_ref = sys.argv[3]
+    head_ref = sys.argv[4] if len(sys.argv) == 6 else "HEAD"
+    head_date = sys.argv[5] if len(sys.argv) == 6 else None
 
     # Filter out standard dependency bots at the query level to preserve token bandwidth
-    search_query = (
-        f"is:pr is:merged base:main merged:>={tag_date} "
-        "-author:app/renovate -author:dependabot -author:github-actions"
-    )
+    search_query = f"is:pr is:merged base:main merged:>={tag_date} "
+    if head_date:
+        search_query += f"merged:<={head_date} "
+
+    search_query += "-author:app/renovate -author:dependabot -author:github-actions"
 
     prs = run_gh_json(
         [
@@ -44,7 +47,7 @@ def main() -> None:
         ]
     )
 
-    parts = [f"# Release Context: {header_ref} to HEAD\n"]
+    parts = [f"# Release Context: {header_ref} to {head_ref}\n"]
 
     if not prs:
         parts.append("*No pull requests found matching the criteria.*")
@@ -77,7 +80,7 @@ def main() -> None:
             [
                 "git",
                 "log",
-                f"{tag_ref}..HEAD",
+                f"{tag_ref}..{head_ref}",
                 "--no-merges",
                 "--format=* `%h` - %s (@%an)",
             ],
