@@ -103,7 +103,7 @@ print_subcommand_help() {
   printf "${BOLD}Usage:${RESET} focal %s %s\n" "${cmd}" "${usage}"
   printf "%s\n\n" "${desc}"
   if [ $# -gt 0 ]; then
-    printf "${BOLD}Options:${RESET}\n"
+    printf '%b\n' "${BOLD}Options:${RESET}"
     for opt in "$@"; do
       printf "  %s\n" "${opt}"
     done
@@ -257,6 +257,24 @@ format_file_for_llm() {
 
   # Transmit status out-of-band
   return "$status_code"
+}
+
+format_files_for_llm() {
+  local _files_list=()
+  if [ $# -gt 0 ]; then
+    _files_list=("$@")
+  else
+    local line
+    while IFS= read -r line; do
+      [ -n "$line" ] && _files_list+=("$line")
+    done
+  fi
+
+  for file in "${_files_list[@]}"; do
+    if [ -f "$file" ]; then
+      format_file_for_llm "$file" || true
+    fi
+  done
 }
 
 # ------------------------------------------

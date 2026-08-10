@@ -82,7 +82,7 @@ while IFS= read -r file; do
   # Safely capture the markdown block AND the exit code without triggering set -e
   status_code=0
   section=$(format_file_for_llm "$file") || status_code=$?
-  buffer="$buffer$section"
+  buffer="$buffer$section"$'\n\n'
 
   # Tally and log file states based on out-of-band signals
   case $status_code in

@@ -39,3 +39,17 @@ setup() {
             false ;; # Fail
     esac
 }
+
+@test "format_files_for_llm preserves double newlines between multiple files" {
+    tmpdir=$(mktemp -d)
+    echo "content1" > "$tmpdir/file1.txt"
+    echo "content2" > "$tmpdir/file2.txt"
+
+    run format_files_for_llm "$tmpdir/file1.txt" "$tmpdir/file2.txt"
+    rm -rf "$tmpdir"
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"content1"* ]]
+    [[ "$output" == *"content2"* ]]
+    [[ "$output" == *"content1"*$'\n```\n\n# '*"content2"* ]]
+}

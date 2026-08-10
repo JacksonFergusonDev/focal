@@ -169,12 +169,7 @@ $(generate_repo_tree)
     fi
   fi
 
-  while IFS= read -r file; do
-    if [ -z "$file" ] || [ ! -f "$file" ]; then
-      continue
-    fi
-    buffer+="$(format_file_for_llm "$file")" || true
-  done <<<"$modified_files"
+  buffer+="$(format_files_for_llm <<<"$modified_files")"
 fi
 
 output_and_copy "$buffer" "Copied diff of $target_name"

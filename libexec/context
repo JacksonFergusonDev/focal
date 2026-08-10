@@ -82,17 +82,12 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 fi
 
 # 4. Process Core and Dynamic Files
-for f in "${existing_core_files[@]}"; do
-  buffer+="$(format_file_for_llm "$f")" || true
-done
+if [ "${#existing_core_files[@]}" -gt 0 ]; then
+  buffer+="$(format_files_for_llm "${existing_core_files[@]}")"$'\n\n'
+fi
 
 if [ -n "$additional_files" ]; then
-  while IFS= read -r file; do
-    if [ -z "$file" ] || [ ! -f "$file" ]; then
-      continue
-    fi
-    buffer+="$(format_file_for_llm "$file")" || true
-  done <<<"$additional_files"
+  buffer+="$(format_files_for_llm <<<"$additional_files")"$'\n\n'
 fi
 
 # 5. Output (Boundary tags handled naturally by output_and_copy)
