@@ -46,9 +46,10 @@ def fetch_url(url: str) -> str:
         },
     )
     try:
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, timeout=10) as response:
             raw_bytes: bytes = response.read()
-            return raw_bytes.decode("utf-8")
+            charset = response.headers.get_content_charset() or "utf-8"
+            return raw_bytes.decode(charset, errors="replace")
     except urllib.error.URLError as e:
         sys.exit(f"Error fetching {url}: {e}")
 
