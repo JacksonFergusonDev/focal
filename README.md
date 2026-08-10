@@ -144,10 +144,12 @@ To grab the exact state of your current feature branch (uncommitted changes, com
 focal wip-context
 ```
 
-To quickly grab the diff of your currently staged or uncommitted files:
+To quickly grab the diff of your currently staged or uncommitted files (or use `--all` to include untracked files):
 
 ```bash
-focal diff --staged
+focal diff          # Unstaged changes
+focal diff --staged # Staged changes
+focal diff --all    # All changes (staged, unstaged, and untracked)
 ```
 
 ### Web & Documentation Context
@@ -198,7 +200,7 @@ focal release-context
 | Command | Description |
 | --- | --- |
 | `focal wip-context` | Extracts a comprehensive diff, uncommitted status, and topological context for your active branch. |
-| `focal diff` | Copies a formatted git diff of uncommitted or staged (`--staged`) changes. |
+| `focal diff` | Copies a formatted git diff of uncommitted, staged (`--staged`), or all (`--all`) changes, including status and summary context. |
 | `focal pr-diff` | Fetches metadata, description intent, and the full code diff for a GitHub Pull Request. |
 | `focal issues` | Interactively selects and copies GitHub issue descriptions alongside their comment threads. |
 | `focal release-context` | Copies metadata and intent for all PRs merged since the last release tag. |
