@@ -11,17 +11,41 @@ source "${SCRIPT_DIR}/../lib/core.sh"
 require_gh_auth
 require_cmd "fzf"
 
-# 3. Frontend Logic
-selected=$(gh run list --status failure --limit 30 --json databaseId,workflowName,name \
-  --jq '.[] | "\(.databaseId)\t\(.workflowName): \(.name)"' |
-  fzf --prompt="Select failed CI run: " || true)
+# 3. Parse args
+SHOW_ALL=false
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -a | --all)
+      SHOW_ALL=true
+      shift
+      ;;
+    *)
+      echo "Unknown option: $1"
+      exit 1
+      ;;
+  esac
+done
+
+PROMPT="Select failed CI run: "
+GH_ARGS=(run list --limit 30 --json "databaseId,workflowName,name,headBranch,createdAt,displayTitle,status,conclusion")
+
+if [[ $SHOW_ALL == "false" ]]; then
+  GH_ARGS+=(--status failure)
+else
+  PROMPT="Select CI run: "
+fi
+
+# 4. Frontend Logic
+selected=$(gh "${GH_ARGS[@]}" \
+  --jq '.[] | "\(.databaseId)\t[\(.status)\(if .conclusion and .conclusion != "" then "/\(.conclusion)" else "" end)] \(.createdAt) | \(.workflowName) (\(.headBranch)) - \(.displayTitle)"' |
+  fzf --prompt="$PROMPT" || true)
 
 [ -z "$selected" ] && exit 0
 
 run_id=$(echo "$selected" | awk -F'\t' '{print $1}')
 
-# 4. Backend Execution
+# 5. Backend Execution
 formatted=$("$PYTHON_EXEC" -m focal.gh_ci_fail "$run_id")
 
-# 5. Output
+# 6. Output
 output_and_copy "$formatted" "Copied CI failure logs for run $run_id"
