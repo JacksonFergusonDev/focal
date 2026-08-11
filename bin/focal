@@ -17,7 +17,10 @@ _list_commands() {
 
 # Internal helper to parse descriptions and print the help menu
 _print_help() {
-  echo "Usage: focal <command> [args]"
+  echo "Usage: focal [global flags] <command> [args]"
+  echo ""
+  echo "Global flags:"
+  echo "  --repo <url>    Run the command on a remote GitHub repository (caches locally)"
   echo ""
   echo "Available commands:"
 
@@ -35,6 +38,34 @@ _print_help() {
     fi
   done | sort
 }
+
+# Parse global flags
+REPO_URL=""
+declare -a REMAINING_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --repo)
+      if [[ -z ${2:-} ]]; then
+        echo "Error: --repo requires an argument." >&2
+        exit 1
+      fi
+      REPO_URL="$2"
+      shift 2
+      ;;
+    --repo=*)
+      REPO_URL="${1#*=}"
+      shift 1
+      ;;
+    *)
+      REMAINING_ARGS+=("$1")
+      shift 1
+      ;;
+  esac
+done
+
+# Restore positional parameters
+set -- "${REMAINING_ARGS[@]}"
 
 # Route: Autocompletion
 if [ "${1:-}" == "--commands" ]; then
@@ -54,10 +85,41 @@ shift || true
 # Direct 1:1 mapping between subcommand and filename
 SUBCOMMAND_BIN="${LIBEXEC_DIR}/${COMMAND}"
 
-if [ -x "$SUBCOMMAND_BIN" ]; then
-  exec "$SUBCOMMAND_BIN" "$@"
-else
+if [ ! -x "$SUBCOMMAND_BIN" ]; then
   echo "Error: Unknown command '$COMMAND'" >&2
   echo "Run 'focal help' for a list of available commands." >&2
   exit 1
+fi
+
+# Handle remote repository caching and execution
+if [[ -n $REPO_URL ]]; then
+  FOCAL_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/focal/repos"
+
+  URL_HASH=$(echo -n "$REPO_URL" | shasum -a 256 | head -c 16)
+  REPO_BASENAME=$(basename "$REPO_URL" .git)
+  REPO_CACHE_PATH="$FOCAL_CACHE_DIR/${REPO_BASENAME}_${URL_HASH}"
+
+  if [ ! -d "$REPO_CACHE_PATH" ]; then
+    mkdir -p "$FOCAL_CACHE_DIR"
+    echo >&2 "focal: Cloning remote repository into cache..."
+    git clone --filter=blob:none "$REPO_URL" "$REPO_CACHE_PATH" >&2
+  else
+    echo >&2 "focal: Updating cached remote repository..."
+    git -C "$REPO_CACHE_PATH" fetch --all >&2
+    # Reset to the default branch's upstream (or fallback to HEAD if detached)
+    # Using 'git remote show origin' to find the default branch is slow,
+    # so we just reset to origin/HEAD or the current tracked branch.
+    # To be safe and ensure we are on the latest default branch:
+    git -C "$REPO_CACHE_PATH" remote set-head origin -a >&2 || true
+    git -C "$REPO_CACHE_PATH" reset --hard origin/HEAD >&2 || true
+  fi
+
+  cd "$REPO_CACHE_PATH"
+
+  # Execute normally so the shell regains control if needed, though exec is fine
+  # since we don't need a trap anymore for cached repos.
+  exec "$SUBCOMMAND_BIN" "$@"
+else
+  # Standard local execution
+  exec "$SUBCOMMAND_BIN" "$@"
 fi
