@@ -17,7 +17,10 @@ _list_commands() {
 
 # Internal helper to parse descriptions and print the help menu
 _print_help() {
-  echo "Usage: focal <command> [args]"
+  echo "Usage: focal [global flags] <command> [args]"
+  echo ""
+  echo "Global flags:"
+  echo "  --repo <url>    Run the command on a remote GitHub repository (caches locally)"
   echo ""
   echo "Available commands:"
 
