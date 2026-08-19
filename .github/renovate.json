@@ -1,0 +1,56 @@
+{
+    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+    "extends": [
+        "config:best-practices",
+        ":semanticCommits",
+        ":prHourlyLimit2"
+    ],
+    "schedule": [
+        "before 4am on monday"
+    ],
+    "internalChecksFilter": "strict",
+    "rebaseWhen": "conflicted",
+    "labels": [
+        "dependencies",
+        "chore"
+    ],
+    "vulnerabilityAlerts": {
+        "schedule": [
+            "at any time"
+        ]
+    },
+    "packageRules": [
+        {
+            "description": "Require a package to be 2 weeks old before updating, excluding vulnerabilities.",
+            "matchUpdateTypes": [
+                "major",
+                "minor",
+                "patch",
+                "pin",
+                "digest"
+            ],
+            "minimumReleaseAge": "2 weeks"
+        },
+        {
+            "description": "Group all Python dev-dependencies (ci/dev groups) and pre-commit hooks into one automerging PR.",
+            "matchManagers": [
+                "pep621",
+                "pre-commit"
+            ],
+            "matchDepTypes": [
+                "ci",
+                "dev"
+            ],
+            "groupName": "dev-tools-and-linters",
+            "automerge": true
+        },
+        {
+            "description": "Group GitHub Actions updates and automerge them.",
+            "matchManagers": [
+                "github-actions"
+            ],
+            "groupName": "github-actions",
+            "automerge": true
+        }
+    ]
+}
