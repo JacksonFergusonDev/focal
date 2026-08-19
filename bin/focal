@@ -17,26 +17,104 @@ _list_commands() {
 
 # Internal helper to parse descriptions and print the help menu
 _print_help() {
-  echo "Usage: focal [global flags] <command> [args]"
-  echo ""
-  echo "Global flags:"
-  echo "  --repo <url>    Run the command on a remote GitHub repository (caches locally)"
-  echo ""
-  echo "Available commands:"
+  # ANSI colors (disabled if stdout is not a terminal)
+  local bold="" cyan="" reset=""
+  if [ -t 1 ]; then
+    bold="\033[1m"
+    cyan="\033[36m"
+    reset="\033[0m"
+  fi
+
+  # Terminal width — fall back to 80 if tput is unavailable or not a TTY
+  local term_width=80
+  if [ -t 1 ] && command -v tput >/dev/null 2>&1; then
+    term_width=$(tput cols)
+  fi
+
+  # Collect all commands and descriptions, find the longest command name
+  local -a cmd_names=()
+  local -a cmd_descs=()
+  local max_cmd_len=0
 
   for f in "$LIBEXEC_DIR"/*; do
     if [ -f "$f" ] && [ -x "$f" ]; then
-      local cmd_name
-      cmd_name=$(basename "$f")
-
-      # Extract the first line starting with '# DESC: '
+      local name
+      name=$(basename "$f")
       local desc
       desc=$(awk -F '# DESC: ' '/^# DESC: / {print $2; exit}' "$f")
-
-      # Use printf for columnar alignment (reserves 15 chars for command name)
-      printf "  %-15s %s\n" "$cmd_name" "${desc:-No description provided.}"
+      cmd_names+=("$name")
+      cmd_descs+=("${desc:-No description provided.}")
+      if [ "${#name}" -gt "$max_cmd_len" ]; then
+        max_cmd_len="${#name}"
+      fi
     fi
-  done | sort
+  done
+
+  # Layout constants
+  local indent=2  # leading spaces before command
+  local col_gap=3 # gap between command column and description
+  local cmd_col_width=$((max_cmd_len + col_gap))
+  local desc_col_width=$((term_width - indent - cmd_col_width))
+  # Guard against very narrow terminals
+  if [ "$desc_col_width" -lt 20 ]; then desc_col_width=20; fi
+
+  # Word-wrap a string to a given width, with a hanging indent for wrapped lines
+  _wrap_desc() {
+    local text="$1"
+    local width="$2"
+    local hang_indent="$3" # prefix for continuation lines
+    local line="" word=""
+    local first=1
+    for word in $text; do
+      if [ "$first" -eq 1 ]; then
+        line="$word"
+        first=0
+      elif [ $((${#line} + 1 + ${#word})) -le "$width" ]; then
+        line="$line $word"
+      else
+        printf "%s\n" "$line"
+        printf "%s" "$hang_indent"
+        line="$word"
+      fi
+    done
+    [ -n "$line" ] && printf "%s\n" "$line"
+  }
+
+  # Print header
+  printf "${bold}Usage:${reset} focal [global flags] <command> [args]\n\n"
+  printf "${bold}Global flags:${reset}\n"
+  printf "  %-$((cmd_col_width - 1))s %s\n" "--repo <url>" "Run the command on a remote GitHub repository (caches locally)"
+  printf "\n${bold}Available commands:${reset}\n"
+
+  # Build a sorted index
+  local -a sorted_indices=()
+  local num_cmds="${#cmd_names[@]}"
+  for ((i = 0; i < num_cmds; i++)); do sorted_indices+=("$i"); done
+  # Bubble sort by name (small N, fine for a help menu)
+  for ((i = 0; i < num_cmds; i++)); do
+    for ((j = i + 1; j < num_cmds; j++)); do
+      if [[ ${cmd_names[${sorted_indices[$i]}]} > ${cmd_names[${sorted_indices[$j]}]} ]]; then
+        local tmp="${sorted_indices[$i]}"
+        sorted_indices[$i]="${sorted_indices[$j]}"
+        sorted_indices[$j]="$tmp"
+      fi
+    done
+  done
+
+  # Print each command row with word-wrapped description
+  local hang_indent
+  hang_indent="$(printf '%*s' $((indent + cmd_col_width)) '')"
+
+  for idx in "${sorted_indices[@]}"; do
+    local name="${cmd_names[$idx]}"
+    local desc="${cmd_descs[$idx]}"
+
+    # Print command name (colored, left-padded)
+    printf "%${indent}s${cyan}${bold}%-${cmd_col_width}s${reset}" "" "$name"
+
+    # Print description with word-wrap
+    _wrap_desc "$desc" "$desc_col_width" "$hang_indent"
+  done
 }
 
 # Parse global flags
