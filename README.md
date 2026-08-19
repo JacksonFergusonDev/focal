@@ -115,10 +115,14 @@ Need to debug why your GitHub Actions pipeline crashed? Grab the error logs and 
 focal ci-fail
 ```
 
-To aggregate a release context by compiling all pull request intents and raw commit history since the last Git tag:
+To aggregate a release context by compiling all pull request intents and raw commit history since the last Git tag (or specify `minor` / `major` to synthesize across versions):
 
 ```bash
+# Context since the most recent release tag (default)
 focal release-context
+
+# Synthesize changes across patch bumps since the last minor release
+focal release-context minor
 ```
 
 ---
@@ -146,7 +150,7 @@ focal release-context
 | `focal diff` | Copies a formatted git diff of uncommitted, staged (`--staged`), or all (`--all`) changes, including status and summary context. |
 | `focal pr-diff` | Fetches metadata, description intent, and the full code diff for a GitHub Pull Request. |
 | `focal issues` | Interactively selects and copies GitHub issue descriptions alongside their comment threads. |
-| `focal release-context` | Copies metadata, PR intent, and raw commit history since the last release tag. |
+| `focal release-context` | Copies metadata, PR intent, and raw commit history since the last release tag (supports `minor`, `major`, `patch`). |
 | `focal ci-fail` | Fetches and formats GitHub Actions CI failure logs for debugging. |
 
 ---
