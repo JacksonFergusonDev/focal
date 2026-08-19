@@ -7,11 +7,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 source "${SCRIPT_DIR}/../lib/core.sh"
 
-# 2. Check dependencies
-require_gh_auth
-require_cmd "fzf"
-
-# 3. Parse args
+# 2. Parse args
 SHOW_ALL=false
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -33,6 +29,10 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# 3. Check dependencies
+require_gh_auth
+require_cmd "fzf"
 
 PROMPT="Select failed CI run: "
 GH_ARGS=(run list --limit 30 --json "databaseId,workflowName,name,headBranch,createdAt,displayTitle,status,conclusion" --status failure)
