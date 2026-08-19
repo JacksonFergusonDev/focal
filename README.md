@@ -12,7 +12,7 @@
 
 <br>
 
-**CLI utilities for AI-assisted development context and workflow automation.**
+**Stop copy-pasting your codebase into ChatGPT. One command, formatted context, straight to your clipboard.**
 
 [![Version](https://img.shields.io/github/v/release/JacksonFergusonDev/focal?style=flat-square&labelColor=0A0A0A&color=fb923c)](https://github.com/JacksonFergusonDev/focal/releases)
 [![CI](https://img.shields.io/github/actions/workflow/status/JacksonFergusonDev/focal/ci.yml?style=flat-square&color=fb923c&labelColor=0A0A0A&label=CI)](https://github.com/JacksonFergusonDev/focal/actions/workflows/ci.yml)
@@ -25,7 +25,11 @@
 
 </div>
 
-Gathering context for an LLM (whether ChatGPT, Claude, or Gemini) usually means copying and pasting multiple files, scraping git diffs, and manually formatting terminal outputs. Focal automates this boilerplate repository extraction so you can stay in flow and feed your AI assistant exactly what it needs to understand your codebase or external documentation.
+You know the drill: you want a second opinion on your plan for a refactor, so you open ChatGPT, alt-tab back to your editor, select a few files, copy them in one at a time, scroll back up to grab the git diff, and hope you didn't forget any necessary files. By the time the context is pasted in, you've spent more time assembling it than the LLM spends answering.
+
+Focal replaces that whole ritual with a single command. Point it at a diff, a branch, a GitHub issue, a CI failure, or a web page, and it hands back clean, LLM-formatted markdown — already on your clipboard, ready to paste into `chatgpt.com`, `claude.ai`, `gemini.google.com`, or wherever you're working.
+
+---
 
 ## 🚀 Quick Start
 
@@ -39,90 +43,29 @@ brew install jacksonfergusondev/tap/focal
 
 ---
 
-## 💡 Design Philosophy
+## 🎯 Isn't This What Claude Code / Cursor / Codex Already Do?
 
-Focal is built to maximize LLM attention window efficiency and stay out of your way. It adheres to a strict pipeline-native architecture to avoid generating bloated, noisy context blocks:
+No — different job. Those are autonomous coding agents: point one at your repo and it traverses the file tree, runs commands, and writes code on its own, in a dedicated agentic loop.
 
-1. **High Signal, Low Noise:** When generating branch topologies or diffs, Focal aggressively filters out binary blobs, lockfiles, minified assets, and DOM noise using strict heuristic sets. It reserves token bandwidth for the source code and semantic text that actually matters.
-
-1. **Clipboard-First Execution:** Outputs are automatically calculated for token length and piped directly to your system's native clipboard manager (`pbcopy`, `wl-copy`, `xclip`, or `xsel`). No intermediate files; just run the command and paste.
-
-1. **Pipeline Native:** Core routing and file manipulation are handled by ultra-fast UNIX utilities (`rg`, `fd`, `fzf`, `bat`). Python is strictly reserved as an asynchronous backend to handle complex data transformations, like parsing Jupyter Notebook ASTs, resolving Git commit topologies, or stripping HTML structure.
-
-1. **Clear Formatting:** LLMs need structural boundaries. Files, diffs, GitHub API responses, web pages, and CI logs are automatically wrapped in LLM-optimized Markdown blocks, ensuring the model understands file paths, language semantics, and context hierarchies.
-
-1. **Fail Loud, Fail Early:** Pre-flight checks ensure all system dependencies are present before any context generation is attempted. If a required binary is missing, Focal aborts cleanly.
-
----
-
-## ⚡️ Performance & Latency Isolation
-
-Focal is built to be lightweight, utilizing bash wrappers to defer Python's startup overhead until strictly necessary.
-
-1. **Fast-Path Execution:** Commands like `focal search`, `focal file`, or `focal tree` execute entirely via compiled binaries like `ripgrep` or `tree`/`fd`, meaning time-to-clipboard is measured in milliseconds.
-
-1. **Heavy-Path Execution:** For complex extractions like `focal wip-context`, `focal web`, or `focal ci-fail`, the bash layer dynamically resolves a localized `uv` virtual environment to execute the Python backend, ensuring global namespace isolation without sacrificing execution speed.
-
-Our CI pipeline enforces strict linting and type-checking across both the Python (`ruff`, `mypy`, `pytest`) and Shell (`shellcheck`, `shfmt`, `bats`) stacks to guarantee architectural stability.
-
----
-
-## 📦 Detailed Installation & Autocompletion
-
-### Building from Source
-
-If you prefer to compile and install locally instead of using Homebrew, ensure you have the [`uv`](https://github.com/astral-sh/uv) package manager and the [`just`](https://github.com/casey/just) command runner installed on your system.
-
-```bash
-git clone https://github.com/JacksonFergusonDev/focal.git
-cd focal
-just install
-```
-
-*Note: The `just install` pipeline resolves a localized Python environment and symlinks the entrypoint binary into `~/.local/bin`. Ensure this directory is prioritized in your system `$PATH`.*
-
----
-
-### Shell Autocompletion
-
-Focal supports native shell autocompletion for fast subcommand routing.
-
-#### 1. Zsh
-
-**If installed via Homebrew:**
-
-Homebrew automatically links the completion scripts to its internal `site-functions` directory during installation. You only need to ensure `compinit` is initialized in your `~/.zshrc`:
-
-```zsh
-autoload -Uz compinit
-compinit
-```
-
-**If installed from source (`just install`):**
-
-The `just install` command automatically symlinks the completion script to `~/.zsh/completions/_focal` and clears your active `zcompdump` cache. To activate it, ensure your `~/.zshrc` appends that directory to your `fpath` **before** loading `compinit`:
-
-```zsh
-# Add this above your compinit calls in ~/.zshrc
-fpath+=~/.zsh/completions
-
-autoload -Uz compinit
-compinit
-```
-
-#### 2. Bash
-
-To enable Bash completions, you need to source the included `focal.bash` script. Point directly to the completion file in your `~/.bashrc` or `~/.bash_profile`:
-
-```bash
-source ~/.local/share/focal/completions/focal.bash # Adjust path if cloned elsewhere
-```
+Focal isn't an agent, and it doesn't try to be one. It exists for the moments you *don't* want to spin up an agentic session — when you just want to drop a precise, curated slice of your repo into a standard web chat to brainstorm an architecture decision, explain a concept, or debug a CI failure. If you're already living inside Claude Code, Codex, or Cursor, you probably don't need Focal for that session. Focal is for everything that still happens in a browser tab.
 
 ---
 
 ## 🚀 Usage
 
 Focal is designed to be run from anywhere inside a valid Git workspace, but also handles external URLs and clipboard streams.
+
+### Remote Repository Support
+
+You can run any focal command against a remote GitHub repository without having to manually clone it first. Focal will automatically cache a clone locally to make subsequent runs instantaneous:
+
+```bash
+# Extract the project context of a remote repository
+focal context --repo https://github.com/JacksonFergusonDev/focal
+
+# List and extract specific files from a remote repository
+focal files --repo https://github.com/JacksonFergusonDev/focal
+```
 
 ### Basic Context Gathering
 
@@ -208,9 +151,80 @@ focal release-context
 
 ---
 
+## 💡 How It Works
+
+Focal is a thin bash dispatcher (`bin/focal`) that routes each subcommand to a script in `libexec/`. The split keeps things fast:
+
+- **Fast-path commands** — `focal search`, `focal file`, `focal tree` — run entirely through compiled binaries (`ripgrep`, `fd`, `fzf`), so time-to-clipboard is measured in milliseconds.
+- **Heavy-path commands** — `focal wip-context`, `focal web`, `focal ci-fail` — hand off to a Python backend for tasks like parsing notebook ASTs, resolving git commit topologies, or stripping HTML DOM noise.
+
+A few principles shape the output itself:
+
+- **High signal, low noise.** Binary blobs, lockfiles, minified assets, and DOM cruft are aggressively filtered out, so your LLM's attention budget goes to code and text that actually matters.
+- **Clipboard-first.** Every command writes straight to your system clipboard (`pbcopy`, `wl-copy`, `xclip`, or `xsel`) — no intermediate files, no extra steps.
+- **Clear formatting.** Files, diffs, GitHub API responses, and web pages are wrapped in consistent, LLM-optimized markdown blocks, so the model isn't guessing at file paths or context boundaries.
+- **Fail loud, fail early.** Missing dependencies are caught in a pre-flight check before any context generation starts.
+
+CI enforces strict linting and type-checking across both stacks — `ruff`, `mypy`, `pytest` for Python, and `shellcheck`, `shfmt`, `bats` for shell — to keep the tool itself dependable.
+
+---
+
+## 📦 Detailed Installation & Autocompletion
+
+### Building from Source
+
+If you prefer to compile and install locally instead of using Homebrew, ensure you have the [`uv`](https://github.com/astral-sh/uv) package manager and the [`just`](https://github.com/casey/just) command runner installed on your system.
+
+```bash
+git clone https://github.com/JacksonFergusonDev/focal.git
+cd focal
+just install
+```
+
+*Note: The `just install` pipeline resolves a localized Python environment and symlinks the entrypoint binary into `~/.local/bin`. Ensure this directory is prioritized in your system `$PATH`.*
+
+---
+
+### Shell Autocompletion
+
+Focal supports native shell autocompletion for fast subcommand routing.
+
+#### 1. Zsh
+
+**If installed via Homebrew:**
+
+Homebrew automatically links the completion scripts to its internal `site-functions` directory during installation. You only need to ensure `compinit` is initialized in your `~/.zshrc`:
+
+```zsh
+autoload -Uz compinit
+compinit
+```
+
+**If installed from source (`just install`):**
+
+The `just install` command automatically symlinks the completion script to `~/.zsh/completions/_focal` and clears your active `zcompdump` cache. To activate it, ensure your `~/.zshrc` appends that directory to your `fpath` **before** loading `compinit`:
+
+```zsh
+# Add this above your compinit calls in ~/.zshrc
+fpath+=~/.zsh/completions
+
+autoload -Uz compinit
+compinit
+```
+
+#### 2. Bash
+
+To enable Bash completions, you need to source the included `focal.bash` script. Point directly to the completion file in your `~/.bashrc` or `~/.bash_profile`:
+
+```bash
+source ~/.local/share/focal/completions/focal.bash # Adjust path if cloned elsewhere
+```
+
+---
+
 ## ⚙️ Dependencies & Toolchain
 
-Focal orchestrates several industry-standard CLI tools to achieve low-latency extraction. While Focal will fail gracefully if one is missing, installing the following is highly recommended:
+Focal orchestrates several industry-standard CLI tools to achieve low-latency extraction. Homebrew will ensure these are installed on your system. While Focal will fail gracefully if one is missing, installing the following is highly recommended:
 
 - **`fzf`**: Required for interactive fuzzy-finding interfaces.
 - **`fd`**: Required for high-speed file traversal (respects `.gitignore`).
