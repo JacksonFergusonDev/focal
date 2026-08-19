@@ -7,38 +7,58 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 source "${SCRIPT_DIR}/../lib/core.sh"
 
-# 2. Check dependencies
-require_gh_auth
-require_cmd "fzf"
-
-# 3. Parse args
+# 2. Parse args
 SHOW_ALL=false
 while [[ $# -gt 0 ]]; do
   case $1 in
+    -h | --help)
+      print_subcommand_help "ci-fail" \
+        "Fetches and formats GitHub Actions CI failure logs." \
+        "[options]" \
+        "-a, --all    Show all historical failed runs (bypasses the 24-hour filter)." \
+        "-h, --help   Show this help message."
+      exit 0
+      ;;
     -a | --all)
       SHOW_ALL=true
       shift
       ;;
     *)
-      echo "Unknown option: $1"
+      echo "Unknown argument: $1" >&2
       exit 1
       ;;
   esac
 done
 
+# 3. Check dependencies
+require_gh_auth
+require_cmd "fzf"
+
 PROMPT="Select failed CI run: "
-GH_ARGS=(run list --limit 30 --json "databaseId,workflowName,name,headBranch,createdAt,displayTitle,status,conclusion")
+GH_ARGS=(run list --limit 30 --json "databaseId,workflowName,name,headBranch,createdAt,displayTitle,status,conclusion" --status failure)
 
 if [[ $SHOW_ALL == "false" ]]; then
-  GH_ARGS+=(--status failure)
+  CUTOFF_DATE=$("$PYTHON_EXEC" -c "import datetime; print((datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ'))")
+  GH_ARGS+=(--created ">=$CUTOFF_DATE")
+  HEADER="Showing failed runs from the last 24 hours (use -a / --all for full history)"
 else
-  PROMPT="Select CI run: "
+  HEADER="Showing all historical failed runs"
 fi
 
 # 4. Frontend Logic
-selected=$(gh "${GH_ARGS[@]}" \
-  --jq '.[] | "\(.databaseId)\t[\(.status)\(if .conclusion and .conclusion != "" then "/\(.conclusion)" else "" end)] \(.createdAt) | \(.workflowName) (\(.headBranch)) - \(.displayTitle)"' |
-  fzf --prompt="$PROMPT" || true)
+runs=$(gh "${GH_ARGS[@]}" \
+  --jq '.[] | "\(.databaseId)\t[\(.status)\(if .conclusion and .conclusion != "" then "/\(.conclusion)" else "" end)] \(.createdAt) | \(.workflowName) (\(.headBranch)) - \(.displayTitle)"')
+
+if [ -z "$runs" ]; then
+  if [[ $SHOW_ALL == "false" ]]; then
+    echo >&2 "No failed CI runs found in the last 24 hours. Run with -a or --all to view historical runs."
+  else
+    echo >&2 "No failed CI runs found."
+  fi
+  exit 0
+fi
+
+selected=$(echo "$runs" | fzf --prompt="$PROMPT" --header="$HEADER" || true)
 
 [ -z "$selected" ] && exit 0
 
