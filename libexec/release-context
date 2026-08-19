@@ -6,9 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 source "${SCRIPT_DIR}/../lib/core.sh"
 
-require_cmd "git"
-require_gh_auth
-
+LEVEL="patch"
 BASE_REF=""
 HEAD_REF="HEAD"
 
@@ -17,10 +15,42 @@ while [[ $# -gt 0 ]]; do
     -h | --help)
       print_subcommand_help "release-context" \
         "Copies metadata, PR intent, and raw commit history since the last release tag." \
-        "[options]" \
-        "--base <ref>    The base Git tag, commit, or branch to start the context from (exclusive). If not provided, it automatically detects the most recent Git tag." \
-        "--head <ref>    The target Git tag, commit, or branch to end the context at (inclusive). Defaults to HEAD."
+        "[level] [options]" \
+        "level            The bump level to compare against: minor, major, or patch (default: patch)." \
+        "--minor, -m      Pull context since the last minor release." \
+        "--major          Pull context since the last major release." \
+        "--patch          Pull context since the last patch release (default)." \
+        "--base <ref>     The base Git tag, commit, or branch to start the context from (exclusive)." \
+        "--head <ref>     The target Git tag, commit, or branch to end the context at (inclusive). Defaults to HEAD."
       exit 0
+      ;;
+    minor | --minor | -m)
+      LEVEL="minor"
+      shift
+      ;;
+    major | --major)
+      LEVEL="major"
+      shift
+      ;;
+    patch | --patch)
+      LEVEL="patch"
+      shift
+      ;;
+    --level | --since)
+      if [[ -z ${2:-} ]]; then
+        echo "Error: $1 requires an argument (major, minor, or patch)" >&2
+        exit 1
+      fi
+      case "$2" in
+        major | minor | patch)
+          LEVEL="$2"
+          ;;
+        *)
+          echo "Error: Invalid release level '$2'. Expected 'major', 'minor', or 'patch'." >&2
+          exit 1
+          ;;
+      esac
+      shift 2
       ;;
     --base)
       BASE_REF="$2"
@@ -37,9 +67,38 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+require_cmd "git"
+require_gh_auth
+
 if [ -z "$BASE_REF" ]; then
-  # 1. Resolve the latest tag, suppressing stderr if none exist
-  LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+  MATCH_ARGS=()
+  case "$LEVEL" in
+    minor)
+      MATCH_ARGS=("--match=*.*.0*")
+      ;;
+    major)
+      MATCH_ARGS=("--match=*.0.0*")
+      ;;
+    patch)
+      MATCH_ARGS=()
+      ;;
+  esac
+
+  # 1. Resolve candidate tag reachable from HEAD_REF
+  LATEST_TAG=$(git describe --tags --abbrev=0 "${MATCH_ARGS[@]}" "$HEAD_REF" 2>/dev/null || echo "")
+
+  # If HEAD_REF points directly to the candidate tag commit, find the previous matching tag
+  if [ -n "$LATEST_TAG" ]; then
+    HEAD_COMMIT=$(git rev-parse "${HEAD_REF}^{commit}" 2>/dev/null || echo "")
+    TAG_COMMIT=$(git rev-parse "${LATEST_TAG}^{commit}" 2>/dev/null || echo "")
+    if [ -n "$HEAD_COMMIT" ] && [ "$HEAD_COMMIT" = "$TAG_COMMIT" ]; then
+      if git rev-parse --verify "${HEAD_REF}^" >/dev/null 2>&1; then
+        LATEST_TAG=$(git describe --tags --abbrev=0 "${MATCH_ARGS[@]}" "${HEAD_REF}^" 2>/dev/null || echo "")
+      else
+        LATEST_TAG=""
+      fi
+    fi
+  fi
 
   if [ -z "$LATEST_TAG" ]; then
     # Fallback: Find the chronological first commit of the repository
