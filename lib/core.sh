@@ -19,6 +19,12 @@ FOCAL_NOISE_EXTS=(
   "zip" "tar" "gz" "xz" "bz2" "whl" "pyc" "bin" "exe" "so" "dylib" "dll" "lock"
 )
 
+FOCAL_NOISE_FILES=(
+  "package-lock.json"
+  "pnpm-lock.yaml"
+  "bun.lockb"
+)
+
 FOCAL_NOISE_REGEX="^($(
   IFS='|'
   echo "${FOCAL_NOISE_EXTS[*]}"
@@ -27,6 +33,17 @@ FOCAL_NOISE_REGEX="^($(
 FD_NOISE_FLAGS=()
 for ext in "${FOCAL_NOISE_EXTS[@]}"; do
   FD_NOISE_FLAGS+=("-E" "*.$ext")
+done
+for file in "${FOCAL_NOISE_FILES[@]}"; do
+  FD_NOISE_FLAGS+=("-E" "$file")
+done
+
+GIT_DIFF_NOISE_EXCLUDES=()
+for ext in "${FOCAL_NOISE_EXTS[@]}"; do
+  GIT_DIFF_NOISE_EXCLUDES+=(":(exclude,glob,top)**/*.$ext")
+done
+for file in "${FOCAL_NOISE_FILES[@]}"; do
+  GIT_DIFF_NOISE_EXCLUDES+=(":(exclude,glob,top)**/$file")
 done
 
 # ------------------------------------------
@@ -214,6 +231,8 @@ format_file_for_llm() {
   local ext="${file##*.}"
   local ext_lower
   ext_lower=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
+  local filename
+  filename=$(basename "$file")
   local content=""
 
   # Define custom exit codes for out-of-band signaling
@@ -227,7 +246,7 @@ format_file_for_llm() {
     content=$("$PYTHON_EXEC" -m focal.notebook "$file")
   elif [[ $ext_lower == "pdf" ]]; then
     content=$("$PYTHON_EXEC" -m focal.pdf "$file")
-  elif [[ $ext_lower =~ $FOCAL_NOISE_REGEX ]]; then
+  elif [[ $ext_lower =~ $FOCAL_NOISE_REGEX ]] || [[ " ${FOCAL_NOISE_FILES[*]} " =~ [[:space:]]${filename}[[:space:]] ]]; then
     local size
     size=$(ls -lh "$file" | awk '{print $5}')
     local meta
