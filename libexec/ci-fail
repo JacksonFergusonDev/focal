@@ -24,15 +24,14 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     *)
-      echo "Unknown argument: $1" >&2
-      exit 1
+      die "unknown argument: $1" "run 'focal ci-fail --help' for usage" 1
       ;;
   esac
 done
 
 # 3. Check dependencies
 require_gh_auth
-require_cmd "fzf"
+require_cmd "fzf" "install fzf (e.g. 'brew install fzf')"
 
 PROMPT="Select failed CI run: "
 GH_ARGS=(run list --limit 30 --json "databaseId,workflowName,name,headBranch,createdAt,displayTitle,status,conclusion" --status failure)
@@ -51,9 +50,9 @@ runs=$(gh "${GH_ARGS[@]}" \
 
 if [ -z "$runs" ]; then
   if [[ $SHOW_ALL == "false" ]]; then
-    echo >&2 "No failed CI runs found in the last 24 hours. Run with -a or --all to view historical runs."
+    status_info "No failed CI runs found in the last 24 hours. Run with -a or --all to view historical runs."
   else
-    echo >&2 "No failed CI runs found."
+    status_info "No failed CI runs found."
   fi
   exit 0
 fi

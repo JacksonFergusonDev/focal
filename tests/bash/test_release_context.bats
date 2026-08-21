@@ -20,12 +20,12 @@ setup() {
     run "$RELEASE_CONTEXT_BIN" --unknown-flag
 
     [ "$status" -eq 1 ]
-    [[ "$output" == *"Unknown argument: --unknown-flag"* ]]
+    [[ "$output" == *"error: unknown argument: --unknown-flag"* ]]
 }
 
 @test "release-context rejects invalid --level argument" {
     run "$RELEASE_CONTEXT_BIN" --level invalid
 
     [ "$status" -eq 1 ]
-    [[ "$output" == *"Error: Invalid release level 'invalid'"* ]]
+    [[ "$output" == *"error: invalid release level 'invalid'"* ]]
 }

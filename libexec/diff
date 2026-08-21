@@ -75,15 +75,15 @@ stat_output=""
 if [ "$mode" == "staged" ]; then
   if [ $# -gt 0 ]; then
     if ! git diff --quiet ${@+"$@"} 2>/dev/null; then
-      echo >&2 "Warning: You have unstaged changes not included in this diff. Use --all to include everything."
+      status_warn "You have unstaged changes not included in this diff. Use --all to include everything."
     fi
   else
     if ! git diff --quiet -- "${GIT_DIFF_NOISE_EXCLUDES[@]}" 2>/dev/null; then
-      echo >&2 "Warning: You have unstaged changes not included in this diff. Use --all to include everything."
+      status_warn "You have unstaged changes not included in this diff. Use --all to include everything."
     fi
   fi
   if $has_untracked; then
-    echo >&2 "Warning: You have untracked files not included in this diff. Use --all to include them."
+    status_warn "You have untracked files not included in this diff. Use --all to include them."
   fi
 
   diff_output=$(git diff --staged "${diff_args[@]}")
@@ -92,15 +92,15 @@ if [ "$mode" == "staged" ]; then
 elif [ "$mode" == "unstaged" ]; then
   if [ $# -gt 0 ]; then
     if ! git diff --staged --quiet ${@+"$@"} 2>/dev/null; then
-      echo >&2 "Warning: You have staged changes not included in this diff. Use --staged or --all."
+      status_warn "You have staged changes not included in this diff. Use --staged or --all."
     fi
   else
     if ! git diff --staged --quiet -- "${GIT_DIFF_NOISE_EXCLUDES[@]}" 2>/dev/null; then
-      echo >&2 "Warning: You have staged changes not included in this diff. Use --staged or --all."
+      status_warn "You have staged changes not included in this diff. Use --staged or --all."
     fi
   fi
   if $has_untracked; then
-    echo >&2 "Warning: You have untracked files not included in this diff. Use --all to include them."
+    status_warn "You have untracked files not included in this diff. Use --all to include them."
   fi
 
   diff_output=$(git diff "${diff_args[@]}")

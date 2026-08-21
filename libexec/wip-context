@@ -8,6 +8,13 @@ source "${SCRIPT_DIR}/../lib/core.sh"
 
 require_cmd "git"
 
+if [[ $# -gt 0 ]] && [[ $1 =~ ^(-h|--help)$ ]]; then
+  print_subcommand_help "wip-context" \
+    "Copies a comprehensive diff, status, and topological context for a WIP branch." \
+    "[base_branch]"
+  exit 0
+fi
+
 # Delegate branch resolution and diff generation to Python
 if ! formatted=$("$PYTHON_EXEC" -m focal.wip_context "$@"); then
   exit 1
