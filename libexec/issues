@@ -41,20 +41,13 @@ ISSUES_JSON="$TMP_DIR/issues.json"
 status_info "Fetching issues..."
 gh issue list --state "$STATE" --limit 100 --json number,title,state,author,body >"$ISSUES_JSON"
 
-# Create a small wrapper script to avoid fzf quote-escaping nightmares
-cat <<'EOF' >"$TMP_DIR/preview_wrapper.sh"
-#!/usr/bin/env bash
-jq -r --argjson id "$1" '.[] | select(.number == $id) | if .body == "" or .body == null then "# \(.title)\n\n*No description provided.*" else "# \(.title)\n\n\(.body)" end' "$2" | "$3" --stdin-markdown
-EOF
-chmod +x "$TMP_DIR/preview_wrapper.sh"
-
 selected=$(jq -r '.[] | "\(.number)\t\(.state)\t\(.title)\t(@\(.author.login))"' "$ISSUES_JSON" |
   column -t -s $'\t' |
   fzf -m \
     --prompt="Select issues: " \
     --header="TAB: multi-select | CTRL-A: select all | ENTER: confirm" \
     --bind "ctrl-a:select-all,ctrl-d:deselect-all" \
-    --preview "\"$TMP_DIR/preview_wrapper.sh\" {1} \"$ISSUES_JSON\" \"${REPO_ROOT}/lib/preview.sh\"" || true)
+    --preview "\"${REPO_ROOT}/lib/preview.sh\" --issue {1} \"$ISSUES_JSON\"" || true)
 
 [ -z "$selected" ] && exit 0
 

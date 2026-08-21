@@ -60,6 +60,53 @@ def format_warning(message: str, hint: str | None = None) -> str:
     return "\n".join(lines)
 
 
+def format_info(message: str) -> str:
+    """Formats an info message with ANSI colors.
+
+    Args:
+        message: The info description.
+
+    Returns:
+        A formatted info string ready for stderr.
+    """
+    use_color = _should_use_color()
+    cyan = "\033[36m" if use_color else ""
+    reset = "\033[0m" if use_color else ""
+    return f"{cyan}info:{reset} {message}"
+
+
+def format_done(message: str) -> str:
+    """Formats a done completion message with ANSI colors.
+
+    Args:
+        message: The done description.
+
+    Returns:
+        A formatted done string ready for stderr.
+    """
+    use_color = _should_use_color()
+    bold = "\033[1m" if use_color else ""
+    green = "\033[32m" if use_color else ""
+    reset = "\033[0m" if use_color else ""
+    return f"{bold}{green}done:{reset} {message}"
+
+
+def format_hint(message: str) -> str:
+    """Formats an indented hint message with ANSI colors.
+
+    Args:
+        message: The hint description.
+
+    Returns:
+        A formatted hint string ready for stderr.
+    """
+    use_color = _should_use_color()
+    dim = "\033[2m" if use_color else ""
+    cyan = "\033[36m" if use_color else ""
+    reset = "\033[0m" if use_color else ""
+    return f"  {dim}{cyan}hint:{reset} {message}"
+
+
 def print_error(message: str, hint: str | None = None) -> None:
     """Prints a formatted error message and optional hint to stderr."""
     print(format_error(message, hint), file=sys.stderr)
@@ -68,6 +115,21 @@ def print_error(message: str, hint: str | None = None) -> None:
 def print_warning(message: str, hint: str | None = None) -> None:
     """Prints a formatted warning message and optional hint to stderr."""
     print(format_warning(message, hint), file=sys.stderr)
+
+
+def print_info(message: str) -> None:
+    """Prints a formatted info message to stderr."""
+    print(format_info(message), file=sys.stderr)
+
+
+def print_done(message: str) -> None:
+    """Prints a formatted done message to stderr."""
+    print(format_done(message), file=sys.stderr)
+
+
+def print_hint(message: str) -> None:
+    """Prints a formatted hint message to stderr."""
+    print(format_hint(message), file=sys.stderr)
 
 
 def die(message: str, hint: str | None = None) -> NoReturn:

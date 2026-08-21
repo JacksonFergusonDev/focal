@@ -14,6 +14,13 @@ if [[ $TARGET == "--stdin-markdown" ]]; then
   exit 0
 fi
 
+if [[ $TARGET == "--issue" ]]; then
+  ISSUE_ID="$2"
+  ISSUES_JSON="$3"
+  jq -r --argjson id "$ISSUE_ID" '.[] | select(.number == $id) | if .body == "" or .body == null then "# \(.title)\n\n*No description provided.*" else "# \(.title)\n\n\(.body)" end' "$ISSUES_JSON" | bat --language=markdown --style=numbers --color=always
+  exit 0
+fi
+
 [ ! -f "$TARGET" ] && exit 0
 
 EXT="${TARGET##*.}"
@@ -36,12 +43,12 @@ MIME_ENC=$(file -b --mime-encoding "$TARGET" 2>/dev/null || echo "binary")
 FILENAME=$(basename "$TARGET")
 
 if [[ $EXT =~ $FOCAL_NOISE_REGEX ]] || [[ " ${FOCAL_NOISE_FILES[*]} " =~ [[:space:]]${FILENAME}[[:space:]] ]] || [[ $MIME_ENC == "binary" ]]; then
-  echo -e "\033[1;34m[Binary / Asset File Omitted from Preview]\033[0m\n"
-  echo -e "\033[1mFile:\033[0m $TARGET"
-  echo -e "\033[1mType:\033[0m $(file -b "$TARGET" 2>/dev/null || echo "Unknown")"
-  echo -e "\033[1mSize:\033[0m $(ls -lh "$TARGET" 2>/dev/null | awk '{print $5}' || echo "0B")"
+  printf "%b\n\n" "${CYAN}${BOLD}[Binary / Asset File Omitted from Preview]${RESET}"
+  printf "%b %s\n" "${BOLD}File:${RESET}" "$TARGET"
+  printf "%b %s\n" "${BOLD}Type:${RESET}" "$(file -b "$TARGET" 2>/dev/null || echo "Unknown")"
+  printf "%b %s\n" "${BOLD}Size:${RESET}" "$(ls -lh "$TARGET" 2>/dev/null | awk '{print $5}' || echo "0B")"
   exit 0
 fi
 
-# 4. Text Fallback
+# 6. Text Fallback
 bat --style=numbers --color=always "$TARGET" 2>/dev/null || cat "$TARGET"

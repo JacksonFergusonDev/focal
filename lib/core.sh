@@ -93,9 +93,13 @@ get_existing_core_manifests() {
 # Utility Functions
 # ------------------------------------------
 
-# ANSI Formatting (Stderr only for pipeline safety)
-# Respect NO_COLOR specification (https://no-color.org) and dumb terminals
-if [ -t 2 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != "dumb" ]; then
+# ANSI Formatting & Terminal Capability Detection
+should_use_color() {
+  local fd="${1:-2}"
+  [ -t "$fd" ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != "dumb" ]
+}
+
+if should_use_color 2 || should_use_color 1; then
   BOLD="\033[1m"
   DIM="\033[2m"
   RED="\033[31m"
@@ -114,31 +118,59 @@ else
 fi
 
 status_error() {
-  printf "${BOLD}${RED}error:${RESET} %s\n" "$1" >&2
+  if should_use_color 2; then
+    printf "${BOLD}${RED}error:${RESET} %s\n" "$1" >&2
+  else
+    printf "error: %s\n" "$1" >&2
+  fi
 }
 
 status_warn() {
-  printf "${BOLD}${YELLOW}warning:${RESET} %s\n" "$1" >&2
+  if should_use_color 2; then
+    printf "${BOLD}${YELLOW}warning:${RESET} %s\n" "$1" >&2
+  else
+    printf "warning: %s\n" "$1" >&2
+  fi
 }
 
 status_hint() {
-  printf "  ${DIM}${CYAN}hint:${RESET} %s\n" "$1" >&2
+  if should_use_color 2; then
+    printf "  ${DIM}${CYAN}hint:${RESET} %s\n" "$1" >&2
+  else
+    printf "  hint: %s\n" "$1" >&2
+  fi
 }
 
 status_info() {
-  printf "${CYAN}info:${RESET} %s\n" "$1" >&2
+  if should_use_color 2; then
+    printf "${CYAN}info:${RESET} %s\n" "$1" >&2
+  else
+    printf "info: %s\n" "$1" >&2
+  fi
 }
 
 status_add() {
-  printf "${GREEN}added:${RESET} %s\n" "$1" >&2
+  if should_use_color 2; then
+    printf "${GREEN}added:${RESET} %s\n" "$1" >&2
+  else
+    printf "added: %s\n" "$1" >&2
+  fi
 }
 
 status_skip() {
-  printf "${DIM}skipped:${RESET} %s\n" "$1" >&2
+  if should_use_color 2; then
+    printf "${DIM}skipped:${RESET} %s\n" "$1" >&2
+  else
+    printf "skipped: %s\n" "$1" >&2
+  fi
 }
 
 status_done() {
-  printf "${BOLD}${GREEN}done:${RESET} %s\n" "$1" >&2
+  if should_use_color 2; then
+    printf "${BOLD}${GREEN}done:${RESET} %s\n" "$1" >&2
+  else
+    printf "done: %s\n" "$1" >&2
+  fi
 }
 
 die() {
