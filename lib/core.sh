@@ -71,29 +71,37 @@ fi
 # Utility Functions
 # ------------------------------------------
 
-# Command Validation
-require_cmd() {
-  local cmd="$1"
-  if ! command -v "$cmd" >/dev/null 2>&1; then
-    echo "error: '$cmd' is not installed or not in PATH." >&2
-    exit 1
-  fi
-}
-
 # ANSI Formatting (Stderr only for pipeline safety)
-if [ -t 2 ]; then
+# Respect NO_COLOR specification (https://no-color.org) and dumb terminals
+if [ -t 2 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != "dumb" ]; then
   BOLD="\033[1m"
   DIM="\033[2m"
+  RED="\033[31m"
+  YELLOW="\033[33m"
   CYAN="\033[36m"
   GREEN="\033[32m"
   RESET="\033[0m"
 else
   BOLD=""
   DIM=""
+  RED=""
+  YELLOW=""
   CYAN=""
   GREEN=""
   RESET=""
 fi
+
+status_error() {
+  printf "${BOLD}${RED}error:${RESET} %s\n" "$1" >&2
+}
+
+status_warn() {
+  printf "${BOLD}${YELLOW}warning:${RESET} %s\n" "$1" >&2
+}
+
+status_hint() {
+  printf "  ${DIM}${CYAN}hint:${RESET} %s\n" "$1" >&2
+}
 
 status_info() {
   printf "${CYAN}info:${RESET} %s\n" "$1" >&2
@@ -109,6 +117,30 @@ status_skip() {
 
 status_done() {
   printf "${BOLD}${GREEN}done:${RESET} %s\n" "$1" >&2
+}
+
+die() {
+  local msg="$1"
+  local hint="${2:-}"
+  local exit_code="${3:-1}"
+
+  status_error "$msg"
+  if [ -n "$hint" ]; then
+    status_hint "$hint"
+  fi
+  exit "$exit_code"
+}
+
+# Command Validation
+require_cmd() {
+  local cmd="$1"
+  local hint="${2:-}"
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    if [ -z "$hint" ]; then
+      hint="ensure '$cmd' is installed and available in PATH"
+    fi
+    die "'$cmd' is not installed or not in PATH." "$hint" 1
+  fi
 }
 
 print_subcommand_help() {
@@ -128,10 +160,9 @@ print_subcommand_help() {
 }
 
 require_gh_auth() {
-  require_cmd "gh"
+  require_cmd "gh" "install the GitHub CLI from https://cli.github.com"
   if ! gh auth status >/dev/null 2>&1; then
-    echo >&2 "error: GitHub CLI is not authenticated. Run 'gh auth login'."
-    exit 1
+    die "GitHub CLI is not authenticated." "run 'gh auth login' to authenticate" 1
   fi
 }
 
@@ -197,7 +228,7 @@ output_and_copy() {
     printf "%s" "$payload" | "${clip_cmd[@]}"
     status_done "$success_msg"
   else
-    echo >&2 "focal: No clipboard manager detected. Dumping to stdout..."
+    status_warn "No clipboard manager detected. Dumping to stdout..."
     printf "%s" "$payload"
   fi
 }
@@ -319,8 +350,7 @@ resolve_path_args() {
     if [[ $arg == */ ]]; then
       local dir="${arg%/}"
       if [ ! -d "$dir" ]; then
-        echo "focal: error: directory not found: $dir" >&2
-        exit 1
+        die "directory not found: $dir" "" 1
       fi
       local found
       found=$(fd --type f --hidden --exclude .git . "$dir")
@@ -330,11 +360,9 @@ resolve_path_args() {
     elif [ -f "$arg" ]; then
       results+="$arg"$'\n'
     elif [ -d "$arg" ]; then
-      echo "focal: error: '$arg' is a directory; append a trailing slash (e.g. '$arg/') to select its contents" >&2
-      exit 1
+      die "'$arg' is a directory; append a trailing slash (e.g. '$arg/') to select its contents" "use '$arg/' to select all files in this directory" 1
     else
-      echo "focal: error: file not found: $arg" >&2
-      exit 1
+      die "file not found: $arg" "verify the path or run 'focal files' to search interactively" 1
     fi
   done
 
@@ -349,7 +377,8 @@ resolve_path_args() {
 
 generate_repo_tree() {
   if ! command -v tree >/dev/null 2>&1; then
-    echo >&2 "focal: 'tree' command not found. Please install it (e.g., brew install tree)."
+    status_warn "'tree' command not found."
+    status_hint "install tree for repository visualization (e.g., brew install tree)"
     return 1
   fi
 

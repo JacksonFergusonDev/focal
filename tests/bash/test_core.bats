@@ -101,3 +101,24 @@ setup() {
     [ "$status" -eq 1 ]
     [[ "$output" == *"error: directory not found: nonexistent_dir"* ]]
 }
+
+@test "status_error, status_warn, and status_hint print formatted messages" {
+    run status_error "something broke"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"error: something broke"* ]]
+
+    run status_warn "heads up"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"warning: heads up"* ]]
+
+    run status_hint "try again"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"hint: try again"* ]]
+}
+
+@test "die outputs error, hint and exits with status code" {
+    run die "critical failure" "check configuration" 42
+    [ "$status" -eq 42 ]
+    [[ "$output" == *"error: critical failure"* ]]
+    [[ "$output" == *"hint: check configuration"* ]]
+}
