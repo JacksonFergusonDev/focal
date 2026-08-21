@@ -45,6 +45,24 @@ def process_issue(issue_id: str) -> str:
     return "\n".join(parts)
 
 
+def format_issues_context(issue_ids: list[str]) -> str:
+    """Fetches and formats multiple GitHub issues into markdown.
+
+    Args:
+        issue_ids: List of issue IDs or numbers.
+
+    Returns:
+        Formatted markdown representation of all issues, separated by dividers.
+    """
+    outputs = []
+    for issue_id in issue_ids:
+        formatted = process_issue(issue_id)
+        if formatted:
+            outputs.append(formatted)
+
+    return "\n\n---\n\n".join(outputs) if outputs else ""
+
+
 def main() -> None:
     """Executes the CLI script to fetch and format GitHub issue threads.
 
@@ -60,17 +78,9 @@ def main() -> None:
             hint="usage: python -m focal.gh_issues <issue_id> [issue_id ...]",
         )
 
-    issue_ids = sys.argv[1:]
-    outputs = []
-
-    for issue_id in issue_ids:
-        formatted = process_issue(issue_id)
-        if formatted:
-            outputs.append(formatted)
-
-    if outputs:
-        # Separate multiple issues with a clear divider
-        print("\n\n---\n\n".join(outputs))
+    output = format_issues_context(sys.argv[1:])
+    if output:
+        print(output)
 
 
 if __name__ == "__main__":

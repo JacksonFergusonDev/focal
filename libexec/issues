@@ -73,7 +73,7 @@ fi
 
 # 4. Fetch and Format Issues
 # Our python script now supports fetching and formatting multiple issues at once
-formatted=$("$PYTHON_EXEC" -m focal.gh_issues "${issue_ids[@]}")
+formatted=$("$PYTHON_EXEC" -m focal issues "${issue_ids[@]}")
 
 if [ -z "$formatted" ]; then
   die "no content could be generated for the selected issues." "" 1

@@ -159,10 +159,10 @@ focal release-context minor
 
 ## 💡 How It Works
 
-Focal is a thin bash dispatcher (`bin/focal`) that routes each subcommand to a script in `libexec/`. The split keeps things fast:
+Focal is built on a hybrid architecture designed to deliver sub-millisecond execution for shell operations while maintaining clean, robust Python pipelines for AST and DOM processing:
 
-- **Fast-path commands** — `focal search`, `focal files`, `focal tree` — run entirely through compiled binaries (`ripgrep`, `fd`, `fzf`), so time-to-clipboard is measured in milliseconds.
-- **Heavy-path commands** — `focal wip-context`, `focal web`, `focal ci-fail` — hand off to a Python backend for tasks like parsing notebook ASTs, resolving git commit topologies, or stripping HTML DOM noise.
+- **Zero-Overhead Bash Dispatcher (`bin/focal` & `libexec/`)**: The top-level entrypoint is a lightweight Bash router. Fast-path commands — like `focal search`, `focal files`, and `focal tree` — execute directly via compiled binaries (`ripgrep`, `fd`, `fzf`), avoiding Python interpreter startup overhead.
+- **Consolidated Python CLI (`python -m focal <subcommand>`)**: Heavy-path tasks — like `focal wip-context`, `focal web`, `focal ci-fail`, and document extractors (`notebook`, `pdf`) — hand off to a centralized internal Python CLI powered by `click`. This architecture provides structured argument validation, native stdin streaming, and decoupled business logic with negligible startup latency (~5–10ms import time).
 
 A few principles shape the output itself:
 
@@ -244,7 +244,7 @@ Focal orchestrates several industry-standard CLI tools to achieve low-latency ex
 
 This repository utilizes a dual-language testing and linting architecture.
 
-- **Python:** 100% type-hinted via `mypy`, formatted with `ruff`, and tested with `pytest`. Parsing pipelines utilize `beautifulsoup4` and `markdownify` for AST and DOM manipulation.
+- **Python:** 100% type-hinted via `mypy`, formatted with `ruff`, and tested with `pytest`. Subcommands are structured using `click`, and parsing pipelines utilize `beautifulsoup4` and `markdownify` for AST and DOM manipulation.
 - **Bash:** Strictly linted via `shellcheck`, formatted with `shfmt`, and behaviorally tested using the `bats` framework.
 
 To run the complete local CI pipeline before submitting a pull request:

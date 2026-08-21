@@ -64,7 +64,7 @@ selected=$(echo "$runs" | fzf --prompt="$PROMPT" --header="$HEADER" || true)
 run_id=$(echo "$selected" | awk -F'\t' '{print $1}')
 
 # 5. Backend Execution
-formatted=$("$PYTHON_EXEC" -m focal.gh_ci_fail "$run_id")
+formatted=$("$PYTHON_EXEC" -m focal ci-fail "$run_id")
 
 # 6. Output
 output_and_copy "$formatted" "Copied CI failure logs for run $run_id"

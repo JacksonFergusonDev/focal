@@ -8,29 +8,25 @@ from focal.errors import die
 from focal.utils import run_gh_json
 
 
-def main() -> None:
-    """Executes the CLI script to fetch and format release context.
+def get_release_context(
+    tag_date: str,
+    header_ref: str,
+    tag_ref: str,
+    head_ref: str = "HEAD",
+    head_date: str | None = None,
+) -> str:
+    """Collects merged pull requests and git commit histories between release tags.
 
-    Retrieves PRs merged into the repository since a specific date using the
-    `gh` CLI and formats their metadata and bodies into a markdown document.
-    Automatically excludes PRs authored by standard dependency bots.
+    Args:
+        tag_date: The ISO date string of the base tag.
+        header_ref: The header label for the base ref.
+        tag_ref: The Git ref of the base tag.
+        head_ref: The target head Git ref (defaults to "HEAD").
+        head_date: Optional ISO date string for the head ref.
 
-    Raises:
-        SystemExit: If the incorrect number of arguments is provided or if
-            the `gh` CLI command fails.
+    Returns:
+        Formatted markdown representation of PRs and commit history between tags.
     """
-    if len(sys.argv) not in (4, 6):
-        die(
-            "incorrect number of arguments",
-            hint="usage: python -m focal.gh_release_context <tag_date> <header_ref> <tag_ref> [<head_ref> <head_date>]",
-        )
-
-    tag_date = sys.argv[1]
-    header_ref = sys.argv[2]
-    tag_ref = sys.argv[3]
-    head_ref = sys.argv[4] if len(sys.argv) == 6 else "HEAD"
-    head_date = sys.argv[5] if len(sys.argv) == 6 else None
-
     # Filter out standard dependency bots at the query level to preserve token bandwidth
     search_query = f"is:pr is:merged base:main merged:>={tag_date} "
     if head_date:
@@ -119,7 +115,35 @@ def main() -> None:
                 parts.extend(commits)
                 parts.append("\n")
 
-    sys.stdout.write("\n".join(parts))
+    return "\n".join(parts)
+
+
+def main() -> None:
+    """Executes the CLI script to fetch and format release context.
+
+    Retrieves PRs merged into the repository since a specific date using the
+    `gh` CLI and formats their metadata and bodies into a markdown document.
+    Automatically excludes PRs authored by standard dependency bots.
+
+    Raises:
+        SystemExit: If the incorrect number of arguments is provided or if
+            the `gh` CLI command fails.
+    """
+    if len(sys.argv) not in (4, 6):
+        die(
+            "incorrect number of arguments",
+            hint="usage: python -m focal.gh_release_context <tag_date> <header_ref> <tag_ref> [<head_ref> <head_date>]",
+        )
+
+    tag_date = sys.argv[1]
+    header_ref = sys.argv[2]
+    tag_ref = sys.argv[3]
+    head_ref = sys.argv[4] if len(sys.argv) == 6 else "HEAD"
+    head_date = sys.argv[5] if len(sys.argv) == 6 else None
+
+    sys.stdout.write(
+        get_release_context(tag_date, header_ref, tag_ref, head_ref, head_date)
+    )
 
 
 if __name__ == "__main__":
