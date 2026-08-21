@@ -105,3 +105,19 @@ def test_cross_runtime_parity_with_bash():
         env={"NO_COLOR": "1", "PATH": os.environ.get("PATH", "")},
     ).stderr.strip()
     assert py_warn_hint == bash_warn_hint
+
+
+def test_format_and_print_info_done_hint(capsys):
+    with patch.dict(os.environ, {"NO_COLOR": "1"}):
+        assert errors.format_info("syncing...") == "info: syncing..."
+        assert errors.format_done("finished") == "done: finished"
+        assert errors.format_hint("check docs") == "  hint: check docs"
+
+        errors.print_info("info msg")
+        errors.print_done("done msg")
+        errors.print_hint("hint msg")
+
+        captured = capsys.readouterr()
+        assert "info: info msg" in captured.err
+        assert "done: done msg" in captured.err
+        assert "hint: hint msg" in captured.err

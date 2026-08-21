@@ -189,3 +189,49 @@ setup() {
     [[ "$output" == *"Size: "* ]]
     [[ "$output" == *"Metadata: "* ]]
 }
+
+@test "status_info, status_done, status_add, and status_skip output formatted messages" {
+    run status_info "info text"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"info: info text"* ]]
+
+    run status_done "task complete"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"done: task complete"* ]]
+
+    run status_add "new_file.txt"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"added: new_file.txt"* ]]
+
+    run status_skip "ignored_file.txt"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"skipped: ignored_file.txt"* ]]
+}
+
+@test "should_use_color respects NO_COLOR and TERM=dumb" {
+    NO_COLOR=1 run should_use_color 2
+    [ "$status" -ne 0 ]
+
+    TERM=dumb run should_use_color 2
+    [ "$status" -ne 0 ]
+}
+
+@test "lib/preview.sh --issue formats issue preview markdown correctly" {
+    tmpdir=$(mktemp -d)
+    cat <<'EOF' > "$tmpdir/issues.json"
+[
+  {
+    "number": 42,
+    "title": "Add FZF Preview Support",
+    "body": "Previewing should be fast and unified."
+  }
+]
+EOF
+
+    run "${BATS_TEST_DIRNAME}/../../lib/preview.sh" --issue 42 "$tmpdir/issues.json"
+    rm -rf "$tmpdir"
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Add FZF Preview Support"* ]]
+    [[ "$output" == *"Previewing should be fast and unified."* ]]
+}

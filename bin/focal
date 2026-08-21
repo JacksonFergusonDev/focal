@@ -20,10 +20,10 @@ _list_commands() {
 _print_help() {
   # ANSI colors (disabled if stdout is not a terminal)
   local bold="" cyan="" reset=""
-  if [ -t 1 ]; then
-    bold="\033[1m"
-    cyan="\033[36m"
-    reset="\033[0m"
+  if should_use_color 1; then
+    bold="$BOLD"
+    cyan="$CYAN"
+    reset="$RESET"
   fi
 
   # Terminal width — fall back to 80 if tput is unavailable or not a TTY
