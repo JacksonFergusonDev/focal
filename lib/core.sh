@@ -352,7 +352,7 @@ generate_repo_tree() {
   # --gitignore: Filter using .gitignore (requires tree v2.0.0+)
   tree -a -F --noreport -L 6 \
     -I '.git|node_modules|.venv|__pycache__|dist|build' \
-    --gitignore 2>/dev/null
+    --gitignore 2>/dev/null || true
 }
 
 _print_context_file() {
