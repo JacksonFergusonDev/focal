@@ -16,7 +16,7 @@ if [[ $# -gt 0 ]] && [[ $1 =~ ^(-h|--help)$ ]]; then
 fi
 
 # Delegate branch resolution and diff generation to Python
-if ! formatted=$("$PYTHON_EXEC" -m focal.wip_context "$@"); then
+if ! formatted=$("$PYTHON_EXEC" -m focal wip-context "$@"); then
   exit 1
 fi
 

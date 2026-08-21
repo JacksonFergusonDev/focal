@@ -21,13 +21,13 @@ EXT="${TARGET##*.}"
 # 3. Parse Notebooks
 if [[ $EXT == "ipynb" ]]; then
   # Use the synchronized Python environment to run the notebook parser
-  "$PYTHON_EXEC" -m focal.notebook "$TARGET" 2>/dev/null | bat --language=markdown --style=numbers --color=always
+  "$PYTHON_EXEC" -m focal notebook "$TARGET" 2>/dev/null | bat --language=markdown --style=numbers --color=always
   exit 0
 fi
 
 # 4. Parse PDFs
 if [[ $EXT == "pdf" ]]; then
-  "$PYTHON_EXEC" -m focal.pdf "$TARGET" 2>/dev/null | bat --language=markdown --style=numbers --color=always
+  "$PYTHON_EXEC" -m focal pdf "$TARGET" 2>/dev/null | bat --language=markdown --style=numbers --color=always
   exit 0
 fi
 

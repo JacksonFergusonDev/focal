@@ -103,23 +103,18 @@ def filter_logs(raw_logs: str) -> str:
     return "\n".join(final_lines)
 
 
-def main() -> None:
-    """Executes the CLI script to fetch and format GitHub Actions CI failure logs.
+def get_ci_failure_context(run_id: str) -> str:
+    """Fetches and formats GitHub Actions CI failure logs for a specific run ID.
 
-    Retrieves the failed step logs and run metadata for a specified GitHub Actions
-    run ID using the `gh` CLI, outputting a markdown-formatted block.
+    Args:
+        run_id: The GitHub Actions run ID.
+
+    Returns:
+        A markdown-formatted string with run metadata and filtered error logs.
 
     Raises:
-        SystemExit: If the incorrect number of arguments is provided, or if the
-            `gh` CLI commands fail to execute.
+        SystemExit: If fetching logs fails.
     """
-    if len(sys.argv) != 2:
-        die(
-            "missing run_id argument", hint="usage: python -m focal.gh_ci_fail <run_id>"
-        )
-
-    run_id = sys.argv[1]
-
     log_res = subprocess.run(
         ["gh", "run", "view", run_id, "--log-failed"], capture_output=True, text=True
     )
@@ -137,10 +132,27 @@ def main() -> None:
     if meta:
         title = f"{meta.get('name') or 'CI'} - {meta.get('displayTitle') or ''}"
 
-    print(f"# CI Failure Context: {title}\n")
-
     filtered_logs = filter_logs(log_res.stdout)
-    print(f"```text\n[error logs]\n{filtered_logs.strip()}\n```")
+    return f"# CI Failure Context: {title}\n\n```text\n[error logs]\n{filtered_logs.strip()}\n```"
+
+
+def main() -> None:
+    """Executes the CLI script to fetch and format GitHub Actions CI failure logs.
+
+    Retrieves the failed step logs and run metadata for a specified GitHub Actions
+    run ID using the `gh` CLI, outputting a markdown-formatted block.
+
+    Raises:
+        SystemExit: If the incorrect number of arguments is provided, or if the
+            `gh` CLI commands fail to execute.
+    """
+    if len(sys.argv) != 2:
+        die(
+            "missing run_id argument", hint="usage: python -m focal.gh_ci_fail <run_id>"
+        )
+
+    run_id = sys.argv[1]
+    print(get_ci_failure_context(run_id))
 
 
 if __name__ == "__main__":

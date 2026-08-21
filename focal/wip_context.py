@@ -228,21 +228,25 @@ def get_diff_for_files(
     return diff_blocks, chars_remaining, omitted_count
 
 
-def main() -> None:
-    """Executes the CLI script to gather context from a WIP branch.
+def get_wip_context(target_branch: str | None = None) -> str:
+    """Gathers branch topology, commit history, file stats, and diffs for a WIP branch.
 
-    Identifies the merge base, extracts the commit topology, builds a macroscopic
-    file stat map, and intelligently appends file diffs based on priority and size.
-    Outputs a markdown-formatted document to standard output.
+    Args:
+        target_branch: Optional base branch to compare against.
+
+    Returns:
+        A markdown-formatted string with WIP branch context.
+
+    Raises:
+        SystemExit: If not inside a Git worktree or if branch resolution fails.
     """
     # Verify we are in a valid Git repository before doing anything
     run_git(["rev-parse", "--is-inside-work-tree"])
 
-    target_arg = sys.argv[1] if len(sys.argv) > 1 else None
-    target_branch = resolve_base_branch(target_arg)
+    resolved_branch = resolve_base_branch(target_branch)
 
     # Resolve references
-    _, base_commit = run_git(["merge-base", target_branch, "HEAD"])
+    _, base_commit = run_git(["merge-base", resolved_branch, "HEAD"])
     _, head_commit = run_git(["rev-parse", "--short", "HEAD"])
     short_base = base_commit[:7]
 
@@ -260,7 +264,7 @@ def main() -> None:
     )
     if not topology:
         die(
-            f"no divergent commits found between '{target_branch}' and HEAD",
+            f"no divergent commits found between '{resolved_branch}' and HEAD",
             hint="create commits on this branch or specify a different base branch: focal wip-context <branch>",
         )
     topology = topology.strip()
@@ -302,7 +306,7 @@ def main() -> None:
     # Document Assembly
     parts = [
         "# WIP Branch Context",
-        f"**Base:** `{target_branch}` ({short_base}) | **HEAD:** ({head_commit})",
+        f"**Base:** `{resolved_branch}` ({short_base}) | **HEAD:** ({head_commit})",
     ]
 
     if status:
@@ -351,7 +355,18 @@ def main() -> None:
             f"\n*...diffs for {total_omitted} remaining files omitted (context limit reached).*"
         )
 
-    sys.stdout.write("\n".join(parts) + "\n")
+    return "\n".join(parts) + "\n"
+
+
+def main() -> None:
+    """Executes the CLI script to gather context from a WIP branch.
+
+    Identifies the merge base, extracts the commit topology, builds a macroscopic
+    file stat map, and intelligently appends file diffs based on priority and size.
+    Outputs a markdown-formatted document to standard output.
+    """
+    target_arg = sys.argv[1] if len(sys.argv) > 1 else None
+    sys.stdout.write(get_wip_context(target_arg))
 
 
 if __name__ == "__main__":

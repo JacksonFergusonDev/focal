@@ -18,7 +18,7 @@ print_help() {
 
 # 1. Check if we have piped input (stdin is not a terminal)
 if [ ! -t 0 ]; then
-  if ! formatted=$(cat | "$PYTHON_EXEC" -m focal.web_context); then
+  if ! formatted=$(cat | "$PYTHON_EXEC" -m focal web); then
     exit 1
   fi
   output_and_copy "$formatted" "Copied markdown context from piped HTML"
@@ -40,7 +40,7 @@ if [[ ! $url =~ ^https?:// ]]; then
   url="https://$url"
 fi
 
-if ! formatted=$("$PYTHON_EXEC" -m focal.web_context "$url"); then
+if ! formatted=$("$PYTHON_EXEC" -m focal web "$url"); then
   exit 1
 fi
 

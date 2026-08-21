@@ -124,7 +124,7 @@ fi
 repo_context="$(generate_project_context)"
 
 # 3. Pass the parameters to the Python backend
-if ! formatted=$("$PYTHON_EXEC" -m focal.gh_release_context "$TAG_DATE" "$HEADER_REF" "$LATEST_TAG" "$HEAD_REF" "$HEAD_DATE"); then
+if ! formatted=$("$PYTHON_EXEC" -m focal release-context "$TAG_DATE" "$HEADER_REF" "$LATEST_TAG" "$HEAD_REF" "$HEAD_DATE"); then
   exit 1
 fi
 

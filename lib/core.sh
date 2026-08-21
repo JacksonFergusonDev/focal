@@ -283,9 +283,9 @@ format_file_for_llm() {
     content="[empty file]"
     status_code=10
   elif [[ $ext_lower == "ipynb" ]]; then
-    content=$("$PYTHON_EXEC" -m focal.notebook "$file")
+    content=$("$PYTHON_EXEC" -m focal notebook "$file")
   elif [[ $ext_lower == "pdf" ]]; then
-    content=$("$PYTHON_EXEC" -m focal.pdf "$file")
+    content=$("$PYTHON_EXEC" -m focal pdf "$file")
   elif [[ $ext_lower =~ $FOCAL_NOISE_REGEX ]] || [[ " ${FOCAL_NOISE_FILES[*]} " =~ [[:space:]]${filename}[[:space:]] ]]; then
     local size
     size=$(ls -lh "$file" | awk '{print $5}')

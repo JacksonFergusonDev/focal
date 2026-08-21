@@ -7,21 +7,18 @@ from focal.errors import die
 from focal.utils import run_gh_json
 
 
-def main() -> None:
-    """Executes the CLI script to fetch and format a GitHub Pull Request context.
+def get_pr_diff_context(pr_id: str) -> str:
+    """Fetches and formats a GitHub Pull Request context.
 
-    Retrieves the metadata, intent (body), and code diff for a specified GitHub
-    PR using the `gh` CLI, outputting a markdown-formatted document.
+    Args:
+        pr_id: The pull request number or identifier.
+
+    Returns:
+        Formatted markdown representation of the PR metadata, description, and diff.
 
     Raises:
-        SystemExit: If the incorrect number of arguments is provided, or if the
-            `gh` CLI commands fail to execute.
+        SystemExit: If the PR diff cannot be fetched.
     """
-    if len(sys.argv) != 2:
-        die("missing PR ID argument", hint="usage: python -m focal.gh_pr_diff <pr_id>")
-
-    pr_id = sys.argv[1]
-
     data = run_gh_json(["pr", "view", pr_id, "--json", "title,body,url"])
 
     diff_res = subprocess.run(
@@ -42,7 +39,24 @@ def main() -> None:
     parts.append("\n## Diff")
     parts.append(f"```diff\n{diff_res.stdout.strip()}\n```")
 
-    print("\n".join(parts))
+    return "\n".join(parts)
+
+
+def main() -> None:
+    """Executes the CLI script to fetch and format a GitHub Pull Request context.
+
+    Retrieves the metadata, intent (body), and code diff for a specified GitHub
+    PR using the `gh` CLI, outputting a markdown-formatted document.
+
+    Raises:
+        SystemExit: If the incorrect number of arguments is provided, or if the
+            `gh` CLI commands fail to execute.
+    """
+    if len(sys.argv) != 2:
+        die("missing PR ID argument", hint="usage: python -m focal.gh_pr_diff <pr_id>")
+
+    pr_id = sys.argv[1]
+    print(get_pr_diff_context(pr_id))
 
 
 if __name__ == "__main__":

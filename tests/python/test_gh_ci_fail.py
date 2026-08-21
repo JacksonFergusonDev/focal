@@ -28,8 +28,9 @@ def test_gh_ci_fail_main_success():
             ["run", "view", "123", "--json", "name,displayTitle"], exit_on_error=False
         )
 
-        mock_print.assert_any_call("# CI Failure Context: Test Run - PR Fix\n")
-        mock_print.assert_any_call("```text\n[error logs]\nfailed log content\n```")
+        mock_print.assert_called_once_with(
+            "# CI Failure Context: Test Run - PR Fix\n\n```text\n[error logs]\nfailed log content\n```"
+        )
 
 
 def test_gh_ci_fail_main_missing_args():

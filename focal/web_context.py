@@ -79,6 +79,38 @@ def fetch_url(url: str) -> str:
         )
 
 
+def get_web_context(url: str | None = None, html_content: str | None = None) -> str:
+    """Generates markdown context from a URL or raw HTML string.
+
+    Args:
+        url: Optional URL to fetch.
+        html_content: Optional raw HTML string.
+
+    Returns:
+        Clean markdown representation of the web page.
+
+    Raises:
+        SystemExit: If neither url nor valid html_content is provided.
+    """
+    if html_content is not None:
+        if not html_content.strip():
+            die(
+                "received empty piped input",
+                hint="pipe HTML via stdin or provide a URL argument",
+            )
+        return parse_html_to_md(html_content, "Piped DOM/Clipboard")
+
+    if url:
+        raw_html = fetch_url(url)
+        return parse_html_to_md(raw_html, url)
+
+    die(
+        "missing URL or HTML input",
+        hint="usage: pbpaste | focal web OR focal web <url>",
+    )
+    return ""
+
+
 def main() -> None:
     """Executes the CLI script to parse a webpage or piped HTML for LLM context.
 
@@ -89,12 +121,7 @@ def main() -> None:
     # Check if data is being piped in via stdin
     if not sys.stdin.isatty():
         raw_html = sys.stdin.read()
-        if not raw_html.strip():
-            die(
-                "received empty piped input",
-                hint="pipe HTML via stdin or provide a URL argument",
-            )
-        sys.stdout.write(parse_html_to_md(raw_html, "Piped DOM/Clipboard"))
+        sys.stdout.write(get_web_context(html_content=raw_html))
         return
 
     # Otherwise, expect a URL argument
@@ -105,8 +132,7 @@ def main() -> None:
         )
 
     url = sys.argv[1]
-    raw_html = fetch_url(url)
-    sys.stdout.write(parse_html_to_md(raw_html, url))
+    sys.stdout.write(get_web_context(url=url))
 
 
 if __name__ == "__main__":
