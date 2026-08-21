@@ -54,3 +54,54 @@ def test_print_error_and_warning(capsys):
         assert "hint: an error hint" in captured.err
         assert "warning: a warning" in captured.err
         assert "hint: a warning hint" in captured.err
+
+
+def test_cross_runtime_parity_with_bash():
+    """Asserts that Python and Bash implementations output identical diagnostic text."""
+    import subprocess
+    from pathlib import Path
+
+    repo_root = Path(__file__).parent.parent.parent
+    core_sh = repo_root / "lib" / "core.sh"
+
+    # Test error without hint
+    py_err = errors.format_error("something failed")
+    bash_err = subprocess.run(
+        [
+            "bash",
+            "-c",
+            f"source '{core_sh}'; status_error 'something failed'",
+        ],
+        capture_output=True,
+        text=True,
+        env={"NO_COLOR": "1", "PATH": os.environ.get("PATH", "")},
+    ).stderr.strip()
+    assert py_err == bash_err
+
+    # Test error with hint
+    py_err_hint = errors.format_error("something failed", hint="try this")
+    bash_err_hint = subprocess.run(
+        [
+            "bash",
+            "-c",
+            f"source '{core_sh}'; status_error 'something failed' && status_hint 'try this'",
+        ],
+        capture_output=True,
+        text=True,
+        env={"NO_COLOR": "1", "PATH": os.environ.get("PATH", "")},
+    ).stderr.strip()
+    assert py_err_hint == bash_err_hint
+
+    # Test warning with hint
+    py_warn_hint = errors.format_warning("be careful", hint="watch out")
+    bash_warn_hint = subprocess.run(
+        [
+            "bash",
+            "-c",
+            f"source '{core_sh}'; status_warn 'be careful' && status_hint 'watch out'",
+        ],
+        capture_output=True,
+        text=True,
+        env={"NO_COLOR": "1", "PATH": os.environ.get("PATH", "")},
+    ).stderr.strip()
+    assert py_warn_hint == bash_warn_hint

@@ -122,3 +122,30 @@ setup() {
     [[ "$output" == *"error: critical failure"* ]]
     [[ "$output" == *"hint: check configuration"* ]]
 }
+
+@test "parity: bash and python error formatting without hint match identically" {
+    export NO_COLOR=1
+    run status_error "file not found"
+    bash_out="$output"
+
+    py_out=$("$PYTHON_EXEC" -c 'import os; os.environ["NO_COLOR"]="1"; from focal.errors import format_error; print(format_error("file not found"))')
+    [ "$bash_out" = "$py_out" ]
+}
+
+@test "parity: bash and python error formatting with hint match identically" {
+    export NO_COLOR=1
+    run bash -c "source '${BATS_TEST_DIRNAME}/../../lib/core.sh'; status_error 'invalid argument' && status_hint 'see --help'"
+    bash_out="$output"
+
+    py_out=$("$PYTHON_EXEC" -c 'import os; os.environ["NO_COLOR"]="1"; from focal.errors import format_error; print(format_error("invalid argument", hint="see --help"))')
+    [ "$bash_out" = "$py_out" ]
+}
+
+@test "parity: bash and python warning formatting with hint match identically" {
+    export NO_COLOR=1
+    run bash -c "source '${BATS_TEST_DIRNAME}/../../lib/core.sh'; status_warn 'stale cache' && status_hint 'run refresh'"
+    bash_out="$output"
+
+    py_out=$("$PYTHON_EXEC" -c 'import os; os.environ["NO_COLOR"]="1"; from focal.errors import format_warning; print(format_warning("stale cache", hint="run refresh"))')
+    [ "$bash_out" = "$py_out" ]
+}
