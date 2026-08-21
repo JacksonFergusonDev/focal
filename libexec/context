@@ -9,26 +9,34 @@ source "${SCRIPT_DIR}/../lib/core.sh"
 require_cmd "git"
 require_cmd "fd"
 
-# Parse flags
+# Parse flags and positional args
 mode="interactive"
-if [[ $# -gt 0 ]]; then
+path_args=()
+
+while [[ $# -gt 0 ]]; do
   case "$1" in
     -h | --help)
       print_subcommand_help "context" \
         "Generates a project context summary including repo tree, git status, and core manifests." \
-        "[flags]" \
+        "[files/dirs...] | [flags]" \
         "-c, --core       Extract core context only (tree, status, manifests) bypassing prompt." \
         "-a, --all        Extract core context and automatically append all valid files."
       exit 0
       ;;
     -c | --core)
       mode="core"
+      shift
       ;;
     -a | --all)
       mode="all"
+      shift
+      ;;
+    *)
+      path_args+=("$1")
+      shift
       ;;
   esac
-fi
+done
 
 # 1. Resolve which core context files actually exist in the repo
 core_files=("README.md" "pyproject.toml" "package.json" "requirements.txt" "CONTRIBUTING.md" "Cargo.toml")
@@ -39,6 +47,17 @@ for f in "${core_files[@]}"; do
     existing_core_files+=("$f")
   fi
 done
+
+# Resolve any positional pre-selected path arguments
+preselected_files=()
+if [ "${#path_args[@]}" -gt 0 ]; then
+  resolved_output=$(resolve_path_args "${path_args[@]}")
+  if [ -n "$resolved_output" ]; then
+    while IFS= read -r pfile; do
+      [ -n "$pfile" ] && preselected_files+=("$pfile")
+    done <<<"$resolved_output"
+  fi
+fi
 
 # 2. Determine additional files
 additional_files=""
@@ -56,17 +75,35 @@ if [ "$mode" == "interactive" ]; then
     header+=$'\n'"Auto-included: ${joined_files}"
   fi
 
-  # Pass the existing files to core.sh to hide them from the fd search stream
-  FOCAL_EXCLUDE_FILES=("${existing_core_files[@]}")
+  if [ "${#preselected_files[@]}" -gt 0 ]; then
+    joined_preselected=$(printf ", %s" "${preselected_files[@]}")
+    joined_preselected="${joined_preselected:2}"
+    header+=$'\n'"Pre-selected: ${joined_preselected}"
+  fi
+
+  # Pass existing core files and preselected files to core.sh to hide them from the fd search stream
+  FOCAL_EXCLUDE_FILES=()
+  if [ "${#existing_core_files[@]}" -gt 0 ]; then
+    FOCAL_EXCLUDE_FILES+=("${existing_core_files[@]}")
+  fi
+  if [ "${#preselected_files[@]}" -gt 0 ]; then
+    FOCAL_EXCLUDE_FILES+=("${preselected_files[@]}")
+  fi
 
   additional_files=$(interactive_file_select "Additional files: " -m --header "$header")
 elif [ "$mode" == "all" ]; then
   status_info "Discovering all valid files..."
   extra_fd_args=()
-  for excl in "${existing_core_files[@]}"; do
-    extra_fd_args+=("--exclude" "$excl")
-  done
-  additional_files=$(fd --type f --hidden --exclude .git "${extra_fd_args[@]}")
+  if [ "${#existing_core_files[@]}" -gt 0 ]; then
+    for excl in "${existing_core_files[@]}"; do
+      extra_fd_args+=("--exclude" "$excl")
+    done
+  fi
+  if [ "${#extra_fd_args[@]}" -gt 0 ]; then
+    additional_files=$(fd --type f --hidden --exclude .git "${extra_fd_args[@]}")
+  else
+    additional_files=$(fd --type f --hidden --exclude .git)
+  fi
 fi
 
 # 3. Inject Repository Tree and Status
@@ -81,9 +118,13 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   buffer+="$(git status --porcelain)"$'\n```\n\n'
 fi
 
-# 4. Process Core and Dynamic Files
+# 4. Process Core, Pre-selected, and Dynamic Files
 if [ "${#existing_core_files[@]}" -gt 0 ]; then
   buffer+="$(format_files_for_llm "${existing_core_files[@]}")"$'\n\n'
+fi
+
+if [ "${#preselected_files[@]}" -gt 0 ] && [ "$mode" != "all" ]; then
+  buffer+="$(format_files_for_llm "${preselected_files[@]}")"$'\n\n'
 fi
 
 if [ -n "$additional_files" ]; then

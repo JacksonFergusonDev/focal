@@ -214,16 +214,25 @@ interactive_file_select() {
 
   # Dynamically build exclusions if the FOCAL_EXCLUDE_FILES array is populated
   local extra_fd_args=()
-  if [ -n "${FOCAL_EXCLUDE_FILES+x}" ] && [ "${#FOCAL_EXCLUDE_FILES[@]}" -gt 0 ]; then
-    for excl in "${FOCAL_EXCLUDE_FILES[@]}"; do
-      extra_fd_args+=("--exclude" "$excl")
-    done
+  if [ -n "${FOCAL_EXCLUDE_FILES+x}" ]; then
+    if [ "${#FOCAL_EXCLUDE_FILES[@]}" -gt 0 ]; then
+      for excl in "${FOCAL_EXCLUDE_FILES[@]}"; do
+        extra_fd_args+=("--exclude" "$excl")
+      done
+    fi
   fi
 
-  fd --type f --hidden --exclude .git "${extra_fd_args[@]}" | fzf "${fzf_args[@]}" \
-    --prompt="$prompt" \
-    --bind "ctrl-a:select-all,ctrl-d:deselect-all" \
-    --preview "${REPO_ROOT}/lib/preview.sh {}" || true
+  if [ "${#extra_fd_args[@]}" -gt 0 ]; then
+    fd --type f --hidden --exclude .git "${extra_fd_args[@]}" | fzf "${fzf_args[@]}" \
+      --prompt="$prompt" \
+      --bind "ctrl-a:select-all,ctrl-d:deselect-all" \
+      --preview "${REPO_ROOT}/lib/preview.sh {}" || true
+  else
+    fd --type f --hidden --exclude .git | fzf "${fzf_args[@]}" \
+      --prompt="$prompt" \
+      --bind "ctrl-a:select-all,ctrl-d:deselect-all" \
+      --preview "${REPO_ROOT}/lib/preview.sh {}" || true
+  fi
 }
 
 format_file_for_llm() {
@@ -304,6 +313,36 @@ format_files_for_llm() {
   done
 }
 
+resolve_path_args() {
+  local results=""
+  for arg in "$@"; do
+    if [[ $arg == */ ]]; then
+      local dir="${arg%/}"
+      if [ ! -d "$dir" ]; then
+        echo "focal: error: directory not found: $dir" >&2
+        exit 1
+      fi
+      local found
+      found=$(fd --type f --hidden --exclude .git . "$dir")
+      if [ -n "$found" ]; then
+        results+="$found"$'\n'
+      fi
+    elif [ -f "$arg" ]; then
+      results+="$arg"$'\n'
+    elif [ -d "$arg" ]; then
+      echo "focal: error: '$arg' is a directory; append a trailing slash (e.g. '$arg/') to select its contents" >&2
+      exit 1
+    else
+      echo "focal: error: file not found: $arg" >&2
+      exit 1
+    fi
+  done
+
+  if [ -n "$results" ]; then
+    printf "%s" "$results" | awk '!seen[$0]++ && NF'
+  fi
+}
+
 # ------------------------------------------
 # Repository Context Generation
 # ------------------------------------------
@@ -322,7 +361,7 @@ generate_repo_tree() {
   # --gitignore: Filter using .gitignore (requires tree v2.0.0+)
   tree -a -F --noreport -L 6 \
     -I '.git|node_modules|.venv|__pycache__|dist|build' \
-    --gitignore 2>/dev/null
+    --gitignore 2>/dev/null || true
 }
 
 _print_context_file() {
