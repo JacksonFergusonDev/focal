@@ -1,9 +1,6 @@
 """Parses Jupyter notebook (.ipynb) files into clean, LLM-optimized markdown representations."""
 
 import json
-import sys
-
-from focal.errors import die
 
 MAX_OUTPUT_CHARS = 4000
 
@@ -145,25 +142,3 @@ def notebook_to_llm_text(path: str) -> str:
             parts.append("\n".join(block))
 
     return "\n".join(parts).strip() + "\n"
-
-
-def main() -> None:
-    """Executes the CLI script to parse a Jupyter notebook for LLM context.
-
-    Reads a notebook path from system arguments and writes the compiled
-    markdown representation directly to standard output.
-
-    Raises:
-        SystemExit: If the exact required number of arguments is not provided.
-    """
-    if len(sys.argv) != 2:
-        die(
-            "missing notebook path argument",
-            hint="usage: python -m focal.notebook notebook.ipynb",
-        )
-
-    sys.stdout.write(notebook_to_llm_text(sys.argv[1]))
-
-
-if __name__ == "__main__":
-    main()

@@ -1,8 +1,6 @@
 from unittest.mock import patch
 
-import pytest
-
-from focal.gh_issues import main, process_issue
+from focal.gh_issues import format_issues_context, process_issue
 
 
 def test_process_issue_success():
@@ -51,22 +49,16 @@ def test_process_issue_no_description_or_comments():
         assert "## Discussion Thread" not in result
 
 
-def test_main_success():
-    with (
-        patch("focal.gh_issues.sys.argv", ["focal.gh_issues", "1", "2"]),
-        patch("focal.gh_issues.process_issue") as mock_process_issue,
-        patch("builtins.print") as mock_print,
-    ):
+def test_format_issues_context_success():
+    with patch("focal.gh_issues.process_issue") as mock_process_issue:
         mock_process_issue.side_effect = ["Output 1", "Output 2"]
 
-        main()
+        result = format_issues_context(["1", "2"])
 
-        mock_print.assert_called_once_with("Output 1\n\n---\n\nOutput 2")
+        assert result == "Output 1\n\n---\n\nOutput 2"
 
 
-def test_main_missing_args():
-    with patch("focal.gh_issues.sys.argv", ["focal.gh_issues"]):
-        with pytest.raises(SystemExit) as exc_info:
-            main()
-
-        assert "missing issue ID(s)" in str(exc_info.value)
+def test_format_issues_context_empty():
+    with patch("focal.gh_issues.process_issue", return_value=""):
+        result = format_issues_context(["999"])
+        assert result == ""

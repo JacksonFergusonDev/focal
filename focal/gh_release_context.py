@@ -1,11 +1,8 @@
 """Collects merged pull requests and git commit histories between release tags."""
 
 import re
-import subprocess
-import sys
 
-from focal.errors import die
-from focal.utils import run_gh_json
+from focal.utils import build_bot_exclusion_query, is_bot_author, run_gh_json, run_git
 
 
 def get_release_context(
@@ -32,7 +29,7 @@ def get_release_context(
     if head_date:
         search_query += f"merged:<={head_date} "
 
-    search_query += "-author:app/renovate -author:dependabot -author:github-actions"
+    search_query += build_bot_exclusion_query()
 
     prs = run_gh_json(
         [
@@ -76,38 +73,21 @@ def get_release_context(
             parts.append("---\n")
 
     if tag_ref:
-        git_log_res = subprocess.run(
+        code, log_out = run_git(
             [
-                "git",
                 "log",
                 f"{tag_ref}..{head_ref}",
                 "--no-merges",
                 "--format=* `%h` - %s (@%an)",
             ],
-            capture_output=True,
-            text=True,
+            check=False,
         )
 
-        if git_log_res.returncode == 0 and git_log_res.stdout.strip():
-            bot_authors = [
-                "dependabot[bot]",
-                "dependabot",
-                "renovate[bot]",
-                "renovate",
-                "github-actions[bot]",
-                "github-actions",
-            ]
+        if code == 0 and log_out:
             commits = []
-            for line in git_log_res.stdout.splitlines():
+            for line in log_out.splitlines():
                 line = line.strip()
-                if not line:
-                    continue
-                is_bot = False
-                for bot in bot_authors:
-                    if f"(@{bot})" in line or f"(@{bot.replace('[bot]', '')})" in line:
-                        is_bot = True
-                        break
-                if not is_bot:
+                if line and not is_bot_author(line):
                     commits.append(line)
 
             if commits:
@@ -116,35 +96,3 @@ def get_release_context(
                 parts.append("\n")
 
     return "\n".join(parts)
-
-
-def main() -> None:
-    """Executes the CLI script to fetch and format release context.
-
-    Retrieves PRs merged into the repository since a specific date using the
-    `gh` CLI and formats their metadata and bodies into a markdown document.
-    Automatically excludes PRs authored by standard dependency bots.
-
-    Raises:
-        SystemExit: If the incorrect number of arguments is provided or if
-            the `gh` CLI command fails.
-    """
-    if len(sys.argv) not in (4, 6):
-        die(
-            "incorrect number of arguments",
-            hint="usage: python -m focal.gh_release_context <tag_date> <header_ref> <tag_ref> [<head_ref> <head_date>]",
-        )
-
-    tag_date = sys.argv[1]
-    header_ref = sys.argv[2]
-    tag_ref = sys.argv[3]
-    head_ref = sys.argv[4] if len(sys.argv) == 6 else "HEAD"
-    head_date = sys.argv[5] if len(sys.argv) == 6 else None
-
-    sys.stdout.write(
-        get_release_context(tag_date, header_ref, tag_ref, head_ref, head_date)
-    )
-
-
-if __name__ == "__main__":
-    main()

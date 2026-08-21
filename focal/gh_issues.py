@@ -1,8 +1,5 @@
 """Fetches and formats GitHub issues and discussion threads into markdown."""
 
-import sys
-
-from focal.errors import die
 from focal.utils import run_gh_json
 
 
@@ -61,27 +58,3 @@ def format_issues_context(issue_ids: list[str]) -> str:
             outputs.append(formatted)
 
     return "\n\n---\n\n".join(outputs) if outputs else ""
-
-
-def main() -> None:
-    """Executes the CLI script to fetch and format GitHub issue threads.
-
-    Retrieves the title, body, and comment thread for specified GitHub issues
-    using the `gh` CLI, outputting a sequentially formatted markdown document.
-
-    Raises:
-        SystemExit: If no arguments are provided.
-    """
-    if len(sys.argv) < 2:
-        die(
-            "missing issue ID(s)",
-            hint="usage: python -m focal.gh_issues <issue_id> [issue_id ...]",
-        )
-
-    output = format_issues_context(sys.argv[1:])
-    if output:
-        print(output)
-
-
-if __name__ == "__main__":
-    main()

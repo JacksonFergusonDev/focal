@@ -1,11 +1,9 @@
 """Extracts and formats failed GitHub Actions CI logs into markdown for LLM consumption."""
 
 import re
-import subprocess
-import sys
 
 from focal.errors import die
-from focal.utils import run_gh_json
+from focal.utils import run_gh, run_gh_json
 
 
 def filter_logs(raw_logs: str) -> str:
@@ -115,12 +113,10 @@ def get_ci_failure_context(run_id: str) -> str:
     Raises:
         SystemExit: If fetching logs fails.
     """
-    log_res = subprocess.run(
-        ["gh", "run", "view", run_id, "--log-failed"], capture_output=True, text=True
-    )
-    if log_res.returncode != 0:
+    code, stdout = run_gh(["run", "view", run_id, "--log-failed"], exit_on_error=False)
+    if code != 0:
         die(
-            f"error fetching logs: {log_res.stderr.strip()}",
+            f"error fetching logs: {stdout}",
             hint="verify that the run ID exists and you have access",
         )
 
@@ -132,28 +128,5 @@ def get_ci_failure_context(run_id: str) -> str:
     if meta:
         title = f"{meta.get('name') or 'CI'} - {meta.get('displayTitle') or ''}"
 
-    filtered_logs = filter_logs(log_res.stdout)
+    filtered_logs = filter_logs(stdout)
     return f"# CI Failure Context: {title}\n\n```text\n[error logs]\n{filtered_logs.strip()}\n```"
-
-
-def main() -> None:
-    """Executes the CLI script to fetch and format GitHub Actions CI failure logs.
-
-    Retrieves the failed step logs and run metadata for a specified GitHub Actions
-    run ID using the `gh` CLI, outputting a markdown-formatted block.
-
-    Raises:
-        SystemExit: If the incorrect number of arguments is provided, or if the
-            `gh` CLI commands fail to execute.
-    """
-    if len(sys.argv) != 2:
-        die(
-            "missing run_id argument", hint="usage: python -m focal.gh_ci_fail <run_id>"
-        )
-
-    run_id = sys.argv[1]
-    print(get_ci_failure_context(run_id))
-
-
-if __name__ == "__main__":
-    main()

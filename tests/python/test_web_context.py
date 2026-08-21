@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from focal.web_context import fetch_url, main, parse_html_to_md
+from focal.web_context import fetch_url, get_web_context, parse_html_to_md
 
 
 def test_parse_html_to_md():
@@ -64,54 +64,30 @@ def test_fetch_url_error():
         assert "Error fetching https://example.com" in str(exc_info.value)
 
 
-def test_main_with_url():
-    with (
-        patch("focal.web_context.sys.stdin.isatty", return_value=True),
-        patch(
-            "focal.web_context.sys.argv", ["focal.web_context", "https://example.com"]
-        ),
-        patch("focal.web_context.fetch_url") as mock_fetch,
-        patch("focal.web_context.sys.stdout.write") as mock_write,
-    ):
+def test_get_web_context_with_url():
+    with patch("focal.web_context.fetch_url") as mock_fetch:
         mock_fetch.return_value = "<h1>Fetched</h1>"
 
-        main()
-
-        output = mock_write.call_args[0][0]
+        output = get_web_context(url="https://example.com")
         assert "# Source: https://example.com" in output
         assert "# Fetched" in output
 
 
-def test_main_with_stdin():
-    with (
-        patch("focal.web_context.sys.stdin.isatty", return_value=False),
-        patch("focal.web_context.sys.stdin.read", return_value="<h1>Piped</h1>"),
-        patch("focal.web_context.sys.stdout.write") as mock_write,
-    ):
-        main()
-
-        output = mock_write.call_args[0][0]
-        assert "# Source: Piped DOM/Clipboard" in output
-        assert "# Piped" in output
+def test_get_web_context_with_stdin_html():
+    output = get_web_context(html_content="<h1>Piped</h1>")
+    assert "# Source: Piped DOM/Clipboard" in output
+    assert "# Piped" in output
 
 
-def test_main_with_empty_stdin():
-    with (
-        patch("focal.web_context.sys.stdin.isatty", return_value=False),
-        patch("focal.web_context.sys.stdin.read", return_value="   "),
-    ):
-        with pytest.raises(SystemExit) as exc_info:
-            main()
+def test_get_web_context_with_empty_html():
+    with pytest.raises(SystemExit) as exc_info:
+        get_web_context(html_content="   ")
 
-        assert "received empty piped input" in str(exc_info.value)
+    assert "received empty piped input" in str(exc_info.value)
 
 
-def test_main_missing_args():
-    with (
-        patch("focal.web_context.sys.stdin.isatty", return_value=True),
-        patch("focal.web_context.sys.argv", ["focal.web_context"]),
-    ):
-        with pytest.raises(SystemExit) as exc_info:
-            main()
+def test_get_web_context_missing_args():
+    with pytest.raises(SystemExit) as exc_info:
+        get_web_context()
 
-        assert "missing URL argument" in str(exc_info.value)
+    assert "missing URL or HTML input" in str(exc_info.value)
