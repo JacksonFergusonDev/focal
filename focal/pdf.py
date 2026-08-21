@@ -4,6 +4,8 @@ import sys
 
 import pdfplumber
 
+from focal.errors import die
+
 MAX_PAGES = 50
 MAX_OUTPUT_CHARS = 50000
 
@@ -53,7 +55,7 @@ def main() -> None:
         SystemExit: If the exact required number of arguments is not provided.
     """
     if len(sys.argv) != 2:
-        sys.exit("Usage: python -m focal.pdf file.pdf")
+        die("missing PDF path argument", hint="usage: python -m focal.pdf file.pdf")
 
     sys.stdout.write(pdf_to_llm_text(sys.argv[1]) + "\n")
 

@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 REPO_ROOT="$(realpath "${SCRIPT_DIR}/..")"
 LIBEXEC_DIR="${REPO_ROOT}/libexec"
+source "${REPO_ROOT}/lib/core.sh"
 
 # Internal helper to safely list commands for autocompletion
 _list_commands() {
@@ -125,8 +126,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo)
       if [[ -z ${2:-} ]]; then
-        echo "Error: --repo requires an argument." >&2
-        exit 1
+        die "--repo requires an argument." "specify a repository URL, e.g. '--repo https://github.com/org/repo'" 1
       fi
       REPO_URL="$2"
       shift 2
@@ -164,9 +164,7 @@ shift || true
 SUBCOMMAND_BIN="${LIBEXEC_DIR}/${COMMAND}"
 
 if [ ! -x "$SUBCOMMAND_BIN" ]; then
-  echo "Error: Unknown command '$COMMAND'" >&2
-  echo "Run 'focal help' for a list of available commands." >&2
-  exit 1
+  die "unknown command '$COMMAND'" "run 'focal help' for a list of available commands" 1
 fi
 
 # Handle remote repository caching and execution
@@ -179,10 +177,10 @@ if [[ -n $REPO_URL ]]; then
 
   if [ ! -d "$REPO_CACHE_PATH" ]; then
     mkdir -p "$FOCAL_CACHE_DIR"
-    echo >&2 "focal: Cloning remote repository into cache..."
+    status_info "Cloning remote repository into cache..."
     git clone --filter=blob:none "$REPO_URL" "$REPO_CACHE_PATH" >&2
   else
-    echo >&2 "focal: Updating cached remote repository..."
+    status_info "Updating cached remote repository..."
     git -C "$REPO_CACHE_PATH" fetch --all >&2
     # Reset to the default branch's upstream (or fallback to HEAD if detached)
     # Using 'git remote show origin' to find the default branch is slow,

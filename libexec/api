@@ -5,6 +5,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 source "${SCRIPT_DIR}/../lib/core.sh"
-require_cmd "rg"
+require_cmd "rg" "install ripgrep (e.g. 'brew install ripgrep')"
+
+if [[ $# -gt 0 ]] && [[ $1 =~ ^(-h|--help)$ ]]; then
+  print_subcommand_help "api" \
+    "Extracts and copies an overview of Python classes and functions to the clipboard." \
+    ""
+  exit 0
+fi
 
 output_and_copy "$(rg '^(class|def) ')" "API overview copied to clipboard"

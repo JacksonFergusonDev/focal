@@ -101,3 +101,51 @@ setup() {
     [ "$status" -eq 1 ]
     [[ "$output" == *"error: directory not found: nonexistent_dir"* ]]
 }
+
+@test "status_error, status_warn, and status_hint print formatted messages" {
+    run status_error "something broke"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"error: something broke"* ]]
+
+    run status_warn "heads up"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"warning: heads up"* ]]
+
+    run status_hint "try again"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"hint: try again"* ]]
+}
+
+@test "die outputs error, hint and exits with status code" {
+    run die "critical failure" "check configuration" 42
+    [ "$status" -eq 42 ]
+    [[ "$output" == *"error: critical failure"* ]]
+    [[ "$output" == *"hint: check configuration"* ]]
+}
+
+@test "parity: bash and python error formatting without hint match identically" {
+    export NO_COLOR=1
+    run status_error "file not found"
+    bash_out="$output"
+
+    py_out=$("$PYTHON_EXEC" -c 'import os; os.environ["NO_COLOR"]="1"; from focal.errors import format_error; print(format_error("file not found"))')
+    [ "$bash_out" = "$py_out" ]
+}
+
+@test "parity: bash and python error formatting with hint match identically" {
+    export NO_COLOR=1
+    run bash -c "source '${BATS_TEST_DIRNAME}/../../lib/core.sh'; status_error 'invalid argument' && status_hint 'see --help'"
+    bash_out="$output"
+
+    py_out=$("$PYTHON_EXEC" -c 'import os; os.environ["NO_COLOR"]="1"; from focal.errors import format_error; print(format_error("invalid argument", hint="see --help"))')
+    [ "$bash_out" = "$py_out" ]
+}
+
+@test "parity: bash and python warning formatting with hint match identically" {
+    export NO_COLOR=1
+    run bash -c "source '${BATS_TEST_DIRNAME}/../../lib/core.sh'; status_warn 'stale cache' && status_hint 'run refresh'"
+    bash_out="$output"
+
+    py_out=$("$PYTHON_EXEC" -c 'import os; os.environ["NO_COLOR"]="1"; from focal.errors import format_warning; print(format_warning("stale cache", hint="run refresh"))')
+    [ "$bash_out" = "$py_out" ]
+}

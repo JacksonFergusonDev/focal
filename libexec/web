@@ -7,28 +7,13 @@ export FOCAL_OMIT_WORKSPACE=1
 SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 source "${SCRIPT_DIR}/../lib/core.sh"
 
-# Define ANSI formatting codes
-BOLD="\033[1m"
-CYAN="\033[36m"
-GREEN="\033[32m"
-YELLOW="\033[33m"
-DIM="\033[2m"
-RESET="\033[0m"
-
 print_help() {
-  printf "\n%b%bFocal Web Extractor%b\n" "$BOLD" "$CYAN" "$RESET"
-  printf "%bExtracts semantic markdown from public URLs or authenticated piped HTML.%b\n\n" "$DIM" "$RESET"
-
-  printf "%bUSAGE%b\n" "$BOLD" "$RESET"
-  printf "  %bfocal web%b <url>\n" "$GREEN" "$RESET"
-  printf "  pbpaste | %bfocal web%b\n\n" "$GREEN" "$RESET"
-
-  printf "%bEXAMPLES%b\n" "$BOLD" "$RESET"
-  printf "  %b# Fetch a public documentation page%b\n" "$YELLOW" "$RESET"
-  printf "  focal web https://docs.python.org/3/\n\n"
-
-  printf "  %b# Parse an authenticated dashboard copied to your clipboard%b\n" "$YELLOW" "$RESET"
-  printf "  pbpaste | focal web\n\n"
+  print_subcommand_help "web" \
+    "Extracts semantic markdown from public URLs or authenticated piped HTML." \
+    "<url> | pbpaste | focal web" \
+    "Examples:" \
+    "  focal web https://docs.python.org/3/      # Fetch a public documentation page" \
+    "  pbpaste | focal web                       # Parse clipboard HTML content"
 }
 
 # 1. Check if we have piped input (stdin is not a terminal)

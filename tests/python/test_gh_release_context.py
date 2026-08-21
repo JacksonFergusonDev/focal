@@ -52,10 +52,7 @@ def test_main_missing_args():
         with pytest.raises(SystemExit) as exc_info:
             main()
 
-        assert (
-            "Usage: python -m focal.gh_release_context <tag_date> <header_ref> <tag_ref>"
-            in str(exc_info.value)
-        )
+        assert "incorrect number of arguments" in str(exc_info.value)
 
 
 def test_main_no_prs_or_commits():

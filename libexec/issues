@@ -16,16 +16,15 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     -h | --help)
-      echo "Usage: focal issues [options]"
-      echo ""
-      echo "Options:"
-      echo "  --all       Show both open and closed issues"
-      echo "  -h, --help  Show this help message"
+      print_subcommand_help "issues" \
+        "Copies GitHub issues alongside their comment threads." \
+        "[options]" \
+        "--all       Show both open and closed issues." \
+        "-h, --help  Show this help message."
       exit 0
       ;;
     *)
-      echo "Unknown argument: $1" >&2
-      exit 1
+      die "unknown argument: $1" "run 'focal issues --help' for usage" 1
       ;;
   esac
 done
@@ -39,7 +38,7 @@ TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
 ISSUES_JSON="$TMP_DIR/issues.json"
 
-echo >&2 "Fetching issues..."
+status_info "Fetching issues..."
 gh issue list --state "$STATE" --limit 100 --json number,title,state,author,body >"$ISSUES_JSON"
 
 # Create a small wrapper script to avoid fzf quote-escaping nightmares
@@ -77,8 +76,7 @@ fi
 formatted=$("$PYTHON_EXEC" -m focal.gh_issues "${issue_ids[@]}")
 
 if [ -z "$formatted" ]; then
-  echo >&2 "error: No content could be generated for the selected issues."
-  exit 1
+  die "no content could be generated for the selected issues." "" 1
 fi
 
 # 5. Copy to Clipboard

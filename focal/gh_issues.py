@@ -2,6 +2,7 @@
 
 import sys
 
+from focal.errors import die
 from focal.utils import run_gh_json
 
 
@@ -54,7 +55,10 @@ def main() -> None:
         SystemExit: If no arguments are provided.
     """
     if len(sys.argv) < 2:
-        sys.exit("Usage: python -m focal.gh_issues <issue_id> [issue_id ...]")
+        die(
+            "missing issue ID(s)",
+            hint="usage: python -m focal.gh_issues <issue_id> [issue_id ...]",
+        )
 
     issue_ids = sys.argv[1:]
     outputs = []

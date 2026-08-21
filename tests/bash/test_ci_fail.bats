@@ -17,5 +17,5 @@ setup() {
     run "$CI_FAIL_BIN" --unknown-flag
 
     [ "$status" -eq 1 ]
-    [[ "$output" == *"Unknown argument: --unknown-flag"* ]]
+    [[ "$output" == *"error: unknown argument: --unknown-flag"* ]]
 }

@@ -38,16 +38,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --level | --since)
       if [[ -z ${2:-} ]]; then
-        echo "Error: $1 requires an argument (major, minor, or patch)" >&2
-        exit 1
+        die "$1 requires an argument (major, minor, or patch)" "specify 'major', 'minor', or 'patch'" 1
       fi
       case "$2" in
         major | minor | patch)
           LEVEL="$2"
           ;;
         *)
-          echo "Error: Invalid release level '$2'. Expected 'major', 'minor', or 'patch'." >&2
-          exit 1
+          die "invalid release level '$2'. Expected 'major', 'minor', or 'patch'." "valid options: major, minor, patch" 1
           ;;
       esac
       shift 2
@@ -61,8 +59,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     *)
-      echo "Unknown argument: $1" >&2
-      exit 1
+      die "unknown argument: $1" "run 'focal release-context --help' for usage" 1
       ;;
   esac
 done
@@ -114,15 +111,13 @@ else
   # User provided base ref
   LATEST_TAG="$BASE_REF"
   if ! TAG_DATE=$(git log -1 --format=%cI "$LATEST_TAG" 2>/dev/null); then
-    echo "Error: Invalid base ref '$BASE_REF'" >&2
-    exit 1
+    die "invalid base ref '$BASE_REF'" "ensure the git ref exists in this repository" 1
   fi
   HEADER_REF="$LATEST_TAG"
 fi
 
 if ! HEAD_DATE=$(git log -1 --format=%cI "$HEAD_REF" 2>/dev/null); then
-  echo "Error: Invalid head ref '$HEAD_REF'" >&2
-  exit 1
+  die "invalid head ref '$HEAD_REF'" "ensure the git ref exists in this repository" 1
 fi
 
 # 2. Extract repository architecture context

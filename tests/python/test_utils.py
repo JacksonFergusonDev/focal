@@ -36,7 +36,7 @@ def test_run_gh_json_command_failure_exit():
 def test_run_gh_json_command_failure_no_exit():
     with (
         patch("focal.utils.subprocess.run") as mock_run,
-        patch("focal.utils.sys.stderr", new_callable=MagicMock),
+        patch("focal.errors.sys.stderr", new_callable=MagicMock),
     ):
         mock_result = MagicMock()
         mock_result.returncode = 1
@@ -58,13 +58,13 @@ def test_run_gh_json_decode_error_exit():
         with pytest.raises(SystemExit) as exc_info:
             run_gh_json(["test"])
 
-        assert "Error: Failed to parse JSON output from gh test" in str(exc_info.value)
+        assert "Failed to parse JSON output from gh test" in str(exc_info.value)
 
 
 def test_run_gh_json_decode_error_no_exit():
     with (
         patch("focal.utils.subprocess.run") as mock_run,
-        patch("focal.utils.sys.stderr", new_callable=MagicMock),
+        patch("focal.errors.sys.stderr", new_callable=MagicMock),
     ):
         mock_result = MagicMock()
         mock_result.returncode = 0

@@ -3,6 +3,8 @@
 import json
 import sys
 
+from focal.errors import die
+
 MAX_OUTPUT_CHARS = 4000
 
 
@@ -155,7 +157,10 @@ def main() -> None:
         SystemExit: If the exact required number of arguments is not provided.
     """
     if len(sys.argv) != 2:
-        sys.exit("Usage: python -m focal.notebook notebook.ipynb")
+        die(
+            "missing notebook path argument",
+            hint="usage: python -m focal.notebook notebook.ipynb",
+        )
 
     sys.stdout.write(notebook_to_llm_text(sys.argv[1]))
 

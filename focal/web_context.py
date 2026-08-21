@@ -8,6 +8,8 @@ import urllib.request
 from bs4 import BeautifulSoup
 from markdownify import markdownify
 
+from focal.errors import die
+
 
 def parse_html_to_md(html: str, source_label: str) -> str:
     """Strips noisy DOM elements from HTML and returns clean Markdown.
@@ -71,7 +73,10 @@ def fetch_url(url: str) -> str:
             charset = response.headers.get_content_charset() or "utf-8"
             return raw_bytes.decode(charset, errors="replace")
     except urllib.error.URLError as e:
-        sys.exit(f"Error fetching {url}: {e}")
+        die(
+            f"Error fetching {url}: {e}",
+            hint="check network connectivity or URL validity",
+        )
 
 
 def main() -> None:
@@ -85,14 +90,18 @@ def main() -> None:
     if not sys.stdin.isatty():
         raw_html = sys.stdin.read()
         if not raw_html.strip():
-            sys.exit("Error: Received empty piped input.")
+            die(
+                "received empty piped input",
+                hint="pipe HTML via stdin or provide a URL argument",
+            )
         sys.stdout.write(parse_html_to_md(raw_html, "Piped DOM/Clipboard"))
         return
 
     # Otherwise, expect a URL argument
     if len(sys.argv) != 2:
-        sys.exit(
-            "Usage: pbpaste | python -m focal.web_context OR python -m focal.web_context <url>"
+        die(
+            "missing URL argument",
+            hint="usage: pbpaste | focal web OR focal web <url>",
         )
 
     url = sys.argv[1]

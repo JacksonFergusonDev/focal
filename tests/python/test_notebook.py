@@ -123,4 +123,4 @@ def test_main_missing_args():
         with pytest.raises(SystemExit) as exc_info:
             notebook.main()
 
-        assert "Usage: python -m focal.notebook notebook.ipynb" in str(exc_info.value)
+        assert "missing notebook path argument" in str(exc_info.value)

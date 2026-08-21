@@ -55,7 +55,7 @@ format:
     uv run ruff check --fix .
     uv run ruff format .
     if command -v shfmt >/dev/null 2>&1; then \
-        shfmt -w -s -i 2 bin/* libexec/* lib/* 2>/dev/null || true; \
+        shfmt -w -s -i 2 -ci bin/* libexec/* lib/* 2>/dev/null || true; \
     else \
         printf "{{ yellow }}⚠ shfmt not found. Skipping shell formatting.{{ nc }}\n"; \
     fi
