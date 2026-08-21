@@ -8,16 +8,27 @@ source "${LIB_DIR}/core.sh"
 
 TARGET="$1"
 
+# Helper for markdown rendering with bat/batcat fallback
+_render_markdown() {
+  if command -v bat >/dev/null 2>&1; then
+    bat --language=markdown --style=numbers --color=always
+  elif command -v batcat >/dev/null 2>&1; then
+    batcat --language=markdown --style=numbers --color=always
+  else
+    cat
+  fi
+}
+
 # 2. Parse special flags
 if [[ $TARGET == "--stdin-markdown" ]]; then
-  bat --language=markdown --style=numbers --color=always
+  _render_markdown
   exit 0
 fi
 
 if [[ $TARGET == "--issue" ]]; then
   ISSUE_ID="$2"
   ISSUES_JSON="$3"
-  jq -r --argjson id "$ISSUE_ID" '.[] | select(.number == $id) | if .body == "" or .body == null then "# \(.title)\n\n*No description provided.*" else "# \(.title)\n\n\(.body)" end' "$ISSUES_JSON" | bat --language=markdown --style=numbers --color=always
+  jq -r --argjson id "$ISSUE_ID" '.[] | select(.number == $id) | if .body == "" or .body == null then "# \(.title)\n\n*No description provided.*" else "# \(.title)\n\n\(.body)" end' "$ISSUES_JSON" | _render_markdown
   exit 0
 fi
 
@@ -28,13 +39,13 @@ EXT="${TARGET##*.}"
 # 3. Parse Notebooks
 if [[ $EXT == "ipynb" ]]; then
   # Use the synchronized Python environment to run the notebook parser
-  "$PYTHON_EXEC" -m focal notebook "$TARGET" 2>/dev/null | bat --language=markdown --style=numbers --color=always
+  "$PYTHON_EXEC" -m focal notebook "$TARGET" 2>/dev/null | _render_markdown
   exit 0
 fi
 
 # 4. Parse PDFs
 if [[ $EXT == "pdf" ]]; then
-  "$PYTHON_EXEC" -m focal pdf "$TARGET" 2>/dev/null | bat --language=markdown --style=numbers --color=always
+  "$PYTHON_EXEC" -m focal pdf "$TARGET" 2>/dev/null | _render_markdown
   exit 0
 fi
 
@@ -51,4 +62,10 @@ if [[ $EXT =~ $FOCAL_NOISE_REGEX ]] || [[ " ${FOCAL_NOISE_FILES[*]} " =~ [[:spac
 fi
 
 # 6. Text Fallback
-bat --style=numbers --color=always "$TARGET" 2>/dev/null || cat "$TARGET"
+if command -v bat >/dev/null 2>&1; then
+  bat --style=numbers --color=always "$TARGET" 2>/dev/null || cat "$TARGET"
+elif command -v batcat >/dev/null 2>&1; then
+  batcat --style=numbers --color=always "$TARGET" 2>/dev/null || cat "$TARGET"
+else
+  cat "$TARGET"
+fi
