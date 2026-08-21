@@ -1,10 +1,6 @@
 """Extracts text content from PDF documents for LLM context generation."""
 
-import sys
-
 import pdfplumber
-
-from focal.errors import die
 
 MAX_PAGES = 50
 MAX_OUTPUT_CHARS = 50000
@@ -43,22 +39,3 @@ def pdf_to_llm_text(path: str) -> str:
             return content
     except Exception as e:
         return f"[Error parsing PDF: {e}]"
-
-
-def main() -> None:
-    """Executes the CLI script to parse a PDF for LLM context.
-
-    Reads a PDF path from system arguments and writes the extracted
-    text directly to standard output.
-
-    Raises:
-        SystemExit: If the exact required number of arguments is not provided.
-    """
-    if len(sys.argv) != 2:
-        die("missing PDF path argument", hint="usage: python -m focal.pdf file.pdf")
-
-    sys.stdout.write(pdf_to_llm_text(sys.argv[1]) + "\n")
-
-
-if __name__ == "__main__":
-    main()

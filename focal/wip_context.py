@@ -3,10 +3,10 @@
 import json
 import os
 import subprocess
-import sys
 from pathlib import Path
 
 from focal.errors import die
+from focal.utils import run_git
 
 # Conservative character limit for the diff section (~8k tokens) to maintain high LLM attention
 MAX_DIFF_CHARS = 30000
@@ -27,30 +27,6 @@ def _load_noise_config() -> tuple[set[str], set[str]]:
 
 
 NOISE_EXTENSIONS, NOISE_FILES = _load_noise_config()
-
-
-def run_git(args: list[str], check: bool = True) -> tuple[int, str]:
-    """Executes a Git command and returns its exit code and standard output.
-
-    Args:
-        args: The Git subcommand and its arguments.
-        check: If True, exits the program if the Git command fails.
-
-    Returns:
-        The return code and the stripped standard output.
-
-    Raises:
-        SystemExit: If the Git command fails and `check` is True.
-    """
-    res = subprocess.run(
-        ["git", *args],
-        capture_output=True,
-        text=True,
-    )
-    if check and res.returncode != 0:
-        die(f"Git command failed: git {' '.join(args)}\nError: {res.stderr.strip()}")
-
-    return res.returncode, res.stdout.strip()
 
 
 def resolve_base_branch(target: str | None) -> str:
@@ -314,18 +290,3 @@ def get_wip_context(target_branch: str | None = None) -> str:
         )
 
     return "\n".join(parts) + "\n"
-
-
-def main() -> None:
-    """Executes the CLI script to gather context from a WIP branch.
-
-    Identifies the merge base, extracts the commit topology, builds a macroscopic
-    file stat map, and intelligently appends file diffs based on priority and size.
-    Outputs a markdown-formatted document to standard output.
-    """
-    target_arg = sys.argv[1] if len(sys.argv) > 1 else None
-    sys.stdout.write(get_wip_context(target_arg))
-
-
-if __name__ == "__main__":
-    main()

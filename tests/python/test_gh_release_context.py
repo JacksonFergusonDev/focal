@@ -1,19 +1,12 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import pytest
-
-from focal.gh_release_context import main
+from focal.gh_release_context import get_release_context
 
 
-def test_main_success_with_prs_and_commits():
+def test_get_release_context_with_prs_and_commits():
     with (
-        patch(
-            "focal.gh_release_context.sys.argv",
-            ["focal.gh_release_context", "2023-01-01", "v1.0.0", "v0.9.0"],
-        ),
         patch("focal.gh_release_context.run_gh_json") as mock_run_gh_json,
-        patch("focal.gh_release_context.subprocess.run") as mock_run,
-        patch("focal.gh_release_context.sys.stdout.write") as mock_write,
+        patch("focal.gh_release_context.run_git") as mock_run_git,
     ):
         mock_run_gh_json.return_value = [
             {
@@ -26,14 +19,12 @@ def test_main_success_with_prs_and_commits():
             }
         ]
 
-        mock_git_log_res = MagicMock()
-        mock_git_log_res.returncode = 0
-        mock_git_log_res.stdout = "* `a1b2c3d` - Some commit (@user2)\n* `e4f5g6h` - Dependency update (@dependabot[bot])"
-        mock_run.return_value = mock_git_log_res
+        mock_run_git.return_value = (
+            0,
+            "* `a1b2c3d` - Some commit (@user2)\n* `e4f5g6h` - Dependency update (@dependabot[bot])",
+        )
 
-        main()
-
-        output = mock_write.call_args[0][0]
+        output = get_release_context("2023-01-01", "v1.0.0", "v0.9.0")
 
         assert "# Release Context: v1.0.0 to HEAD" in output
         assert "## PR #1: Fix bug" in output
@@ -47,28 +38,15 @@ def test_main_success_with_prs_and_commits():
         assert "Dependency update" not in output
 
 
-def test_main_missing_args():
-    with patch("focal.gh_release_context.sys.argv", ["focal.gh_release_context"]):
-        with pytest.raises(SystemExit) as exc_info:
-            main()
-
-        assert "incorrect number of arguments" in str(exc_info.value)
-
-
-def test_main_no_prs_or_commits():
+def test_get_release_context_no_prs_or_commits():
     with (
-        patch(
-            "focal.gh_release_context.sys.argv",
-            ["focal.gh_release_context", "2023-01-01", "v1.0.0", ""],
-        ),
         patch("focal.gh_release_context.run_gh_json") as mock_run_gh_json,
-        patch("focal.gh_release_context.sys.stdout.write") as mock_write,
+        patch("focal.gh_release_context.run_git") as mock_run_git,
     ):
         mock_run_gh_json.return_value = []
+        mock_run_git.return_value = (0, "")
 
-        main()
-
-        output = mock_write.call_args[0][0]
+        output = get_release_context("2023-01-01", "v1.0.0", "")
 
         assert "*No pull requests found matching the criteria.*" in output
         assert "## Raw Commits" not in output

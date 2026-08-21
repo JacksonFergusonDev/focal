@@ -3,11 +3,9 @@ from unittest.mock import MagicMock
 from focal import gh_pr_diff
 
 
-def test_gh_pr_diff_happy_path(mocker, capsys):
-    # 1. Setup the simulated subprocess response
-    mock_run = mocker.patch("subprocess.run")
+def test_gh_pr_diff_happy_path(mocker):
+    mock_run = mocker.patch("focal.utils.subprocess.run")
 
-    # Simulate the metadata fetch and the diff fetch.
     mock_meta_response = MagicMock(
         returncode=0,
         stdout='{"title": "Fix memory leak", "body": "Cleared cache", "url": "https://fake"}',
@@ -16,11 +14,7 @@ def test_gh_pr_diff_happy_path(mocker, capsys):
 
     mock_run.side_effect = [mock_meta_response, mock_diff_response]
 
-    # 2. Inject CLI arguments and execute
-    mocker.patch("sys.argv", ["gh_pr_diff.py", "123"])
-    gh_pr_diff.main()
+    result = gh_pr_diff.get_pr_diff_context("123")
 
-    # 3. Capture the stdout and verify the data pipeline
-    captured = capsys.readouterr()
-    assert "# PR #123: Fix memory leak" in captured.out
-    assert "```diff\n+ added line\n- removed line\n```" in captured.out
+    assert "# PR #123: Fix memory leak" in result
+    assert "```diff\n+ added line\n- removed line\n```" in result

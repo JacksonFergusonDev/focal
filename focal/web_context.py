@@ -1,7 +1,6 @@
 """Fetches and converts web pages or raw HTML input into clean markdown."""
 
 import re
-import sys
 import urllib.error
 import urllib.request
 
@@ -109,31 +108,3 @@ def get_web_context(url: str | None = None, html_content: str | None = None) -> 
         hint="usage: pbpaste | focal web OR focal web <url>",
     )
     return ""
-
-
-def main() -> None:
-    """Executes the CLI script to parse a webpage or piped HTML for LLM context.
-
-    Raises:
-        SystemExit: If piped input is empty or if the incorrect number
-            of CLI arguments is provided.
-    """
-    # Check if data is being piped in via stdin
-    if not sys.stdin.isatty():
-        raw_html = sys.stdin.read()
-        sys.stdout.write(get_web_context(html_content=raw_html))
-        return
-
-    # Otherwise, expect a URL argument
-    if len(sys.argv) != 2:
-        die(
-            "missing URL argument",
-            hint="usage: pbpaste | focal web OR focal web <url>",
-        )
-
-    url = sys.argv[1]
-    sys.stdout.write(get_web_context(url=url))
-
-
-if __name__ == "__main__":
-    main()

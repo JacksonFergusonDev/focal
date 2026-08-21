@@ -1,8 +1,6 @@
 import json
 from unittest.mock import mock_open, patch
 
-import pytest
-
 from focal import notebook
 
 
@@ -103,24 +101,3 @@ def test_notebook_to_llm_text():
         assert "```python\nprint(1)\n```" in result
         assert "### Output" in result
         assert "```text\n[stdout]\n1\n```" in result
-
-
-def test_main_success():
-    with (
-        patch("focal.notebook.sys.argv", ["focal.notebook", "test.ipynb"]),
-        patch("focal.notebook.notebook_to_llm_text") as mock_convert,
-        patch("focal.notebook.sys.stdout.write") as mock_write,
-    ):
-        mock_convert.return_value = "parsed text"
-
-        notebook.main()
-
-        mock_write.assert_called_once_with("parsed text")
-
-
-def test_main_missing_args():
-    with patch("focal.notebook.sys.argv", ["focal.notebook"]):
-        with pytest.raises(SystemExit) as exc_info:
-            notebook.main()
-
-        assert "missing notebook path argument" in str(exc_info.value)

@@ -1,58 +1,39 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
-from focal.gh_ci_fail import main
+from focal.gh_ci_fail import get_ci_failure_context
 
 
-def test_gh_ci_fail_main_success():
+def test_get_ci_failure_context_success():
     with (
-        patch("focal.gh_ci_fail.sys.argv", ["focal.gh_ci_fail", "123"]),
-        patch("focal.gh_ci_fail.subprocess.run") as mock_run,
+        patch("focal.gh_ci_fail.run_gh") as mock_run_gh,
         patch("focal.gh_ci_fail.run_gh_json") as mock_run_gh_json,
-        patch("builtins.print") as mock_print,
     ):
-        mock_log_res = MagicMock()
-        mock_log_res.returncode = 0
-        mock_log_res.stdout = "failed log content"
-        mock_run.return_value = mock_log_res
-
+        mock_run_gh.return_value = (0, "failed log content")
         mock_run_gh_json.return_value = {"name": "Test Run", "displayTitle": "PR Fix"}
 
-        main()
+        result = get_ci_failure_context("123")
 
-        mock_run.assert_called_once_with(
-            ["gh", "run", "view", "123", "--log-failed"], capture_output=True, text=True
+        mock_run_gh.assert_called_once_with(
+            ["run", "view", "123", "--log-failed"], exit_on_error=False
         )
         mock_run_gh_json.assert_called_once_with(
             ["run", "view", "123", "--json", "name,displayTitle"], exit_on_error=False
         )
 
-        mock_print.assert_called_once_with(
-            "# CI Failure Context: Test Run - PR Fix\n\n```text\n[error logs]\nfailed log content\n```"
+        assert (
+            result
+            == "# CI Failure Context: Test Run - PR Fix\n\n```text\n[error logs]\nfailed log content\n```"
         )
 
 
-def test_gh_ci_fail_main_missing_args():
-    with patch("focal.gh_ci_fail.sys.argv", ["focal.gh_ci_fail"]):
-        with pytest.raises(SystemExit) as exc_info:
-            main()
-
-        assert "missing run_id argument" in str(exc_info.value)
-
-
-def test_gh_ci_fail_main_log_failure():
-    with (
-        patch("focal.gh_ci_fail.sys.argv", ["focal.gh_ci_fail", "123"]),
-        patch("focal.gh_ci_fail.subprocess.run") as mock_run,
-    ):
-        mock_log_res = MagicMock()
-        mock_log_res.returncode = 1
-        mock_log_res.stderr = "api error"
-        mock_run.return_value = mock_log_res
+def test_get_ci_failure_context_log_failure():
+    with patch("focal.gh_ci_fail.run_gh") as mock_run_gh:
+        mock_run_gh.return_value = (1, "api error")
 
         with pytest.raises(SystemExit) as exc_info:
-            main()
+            get_ci_failure_context("123")
 
         assert "error fetching logs: api error" in str(exc_info.value)
 

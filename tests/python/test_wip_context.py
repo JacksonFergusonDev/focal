@@ -115,12 +115,8 @@ def test_get_diff_for_files_binary_or_empty():
         assert len(blocks) == 0
 
 
-def test_main_success():
-    with (
-        patch("focal.wip_context.sys.argv", ["focal.wip_context", "main"]),
-        patch("focal.wip_context.run_git") as mock_run_git,
-        patch("focal.wip_context.sys.stdout.write") as mock_write,
-    ):
+def test_get_wip_context_success():
+    with patch("focal.wip_context.run_git") as mock_run_git:
 
         def mock_git(args, **kwargs):
             cmd = " ".join(args)
@@ -146,9 +142,8 @@ def test_main_success():
 
         mock_run_git.side_effect = mock_git
 
-        wip_context.main()
+        output = wip_context.get_wip_context("main")
 
-        output = mock_write.call_args[0][0]
         assert "# WIP Branch Context" in output
         assert "M  file.py" in output
         assert "[abcdef] fix" in output
