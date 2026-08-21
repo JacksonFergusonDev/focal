@@ -73,6 +73,7 @@ added_count=0
 empty_count=0
 truncated_count=0
 skipped_count=0
+last_copied_file=""
 
 while IFS= read -r file; do
   if [ -z "$file" ] || [ ! -f "$file" ]; then
@@ -93,25 +94,37 @@ while IFS= read -r file; do
     12)
       status_add "(truncated): $file"
       truncated_count=$((truncated_count + 1))
+      last_copied_file="$file"
       ;;
     10)
       status_add "(empty): $file"
       empty_count=$((empty_count + 1))
+      last_copied_file="$file"
       ;;
     0)
       status_add "$file"
       added_count=$((added_count + 1))
+      last_copied_file="$file"
       ;;
     *)
       # Failsafe for unexpected errors
       status_add "$file"
       added_count=$((added_count + 1))
+      last_copied_file="$file"
       ;;
   esac
 done <<<"$files"
 
+total_copied=$((added_count + empty_count + truncated_count))
+
+if [ "$total_copied" -eq 1 ] && [ -n "$last_copied_file" ]; then
+  copy_msg="Copied $last_copied_file to clipboard"
+else
+  copy_msg="Copied context"
+fi
+
 # Copy payload to clipboard and print token estimate
-output_and_copy "$buffer" "Copied context"
+output_and_copy "$buffer" "$copy_msg"
 
 # 3. Print Summary Report
 if [ "$skipped_count" -gt 0 ] || [ "$truncated_count" -gt 0 ] || [ "$empty_count" -gt 0 ]; then

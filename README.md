@@ -69,13 +69,10 @@ focal files --repo https://github.com/JacksonFergusonDev/focal
 
 ### Basic Context Gathering
 
-If you need to feed a specific file or set of files to an LLM, run the interactive selectors:
+If you need to feed a specific file or set of files to an LLM, run the interactive selector:
 
 ```bash
-# Select a single file (uses fzf to search, bat to preview)
-focal file
-
-# Multi-select files (Tab to select, Enter to confirm)
+# Interactively select files (Tab to multi-select, Enter to confirm)
 focal files
 ```
 
@@ -133,7 +130,6 @@ focal release-context minor
 
 | Command | Description |
 | --- | --- |
-| `focal file` | Interactively selects a single file and copies its formatted contents. |
 | `focal files` | Interactively (or via glob) selects multiple files and copies contents + metadata. |
 | `focal context` | Generates a high-level project summary (tree, git status, dependency manifests). |
 | `focal tree` | Generates and copies the repository directory tree, ignoring `.git` and build caches. |
@@ -159,7 +155,7 @@ focal release-context minor
 
 Focal is a thin bash dispatcher (`bin/focal`) that routes each subcommand to a script in `libexec/`. The split keeps things fast:
 
-- **Fast-path commands** — `focal search`, `focal file`, `focal tree` — run entirely through compiled binaries (`ripgrep`, `fd`, `fzf`), so time-to-clipboard is measured in milliseconds.
+- **Fast-path commands** — `focal search`, `focal files`, `focal tree` — run entirely through compiled binaries (`ripgrep`, `fd`, `fzf`), so time-to-clipboard is measured in milliseconds.
 - **Heavy-path commands** — `focal wip-context`, `focal web`, `focal ci-fail` — hand off to a Python backend for tasks like parsing notebook ASTs, resolving git commit topologies, or stripping HTML DOM noise.
 
 A few principles shape the output itself:
