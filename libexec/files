@@ -12,8 +12,8 @@ if [[ $# -gt 0 ]]; then
   case "$1" in
     -h | --help)
       print_subcommand_help "files" \
-        "Extracts and formats the contents of one or more files for LLM prompting." \
-        "[files...] | [flags]" \
+        "Extracts and formats the contents of one or more files or directories for LLM prompting." \
+        "[files/dirs...] | [flags]" \
         "-a, --all        Extract all valid non-noise files in the repository." \
         "-s, --staged     Extract all files currently staged in git." \
         "-m, --modified   Extract all files with uncommitted changes in the working tree."
@@ -52,7 +52,8 @@ case "$mode" in
     files=$(git ls-files -m)
     ;;
   direct)
-    files=$(printf "%s\n" "$@")
+    require_cmd "fd"
+    files=$(resolve_path_args "$@")
     ;;
   interactive)
     require_cmd "fzf"

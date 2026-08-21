@@ -53,3 +53,51 @@ setup() {
     [[ "$output" == *"content2"* ]]
     [[ "$output" == *"content1"*$'\n```\n\n# '*"content2"* ]]
 }
+
+@test "resolve_path_args handles files, directories with trailing slash, and deduplicates" {
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/pkg"
+    touch "$tmpdir/pkg/mod1.py"
+    touch "$tmpdir/pkg/mod2.py"
+    touch "$tmpdir/root.txt"
+
+    cd "$tmpdir"
+    run resolve_path_args "pkg/" "root.txt" "pkg/mod1.py"
+    rm -rf "$tmpdir"
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"pkg/mod1.py"* ]]
+    [[ "$output" == *"pkg/mod2.py"* ]]
+    [[ "$output" == *"root.txt"* ]]
+
+    # Verify deduplication (mod1.py should only appear once)
+    count=$(echo "$output" | grep -c "pkg/mod1.py" || true)
+    [ "$count" -eq 1 ]
+}
+
+@test "resolve_path_args errors if directory passed without trailing slash" {
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/pkg"
+    touch "$tmpdir/pkg/mod1.py"
+
+    cd "$tmpdir"
+    run resolve_path_args "pkg"
+    rm -rf "$tmpdir"
+
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"error: 'pkg' is a directory; append a trailing slash (e.g. 'pkg/') to select its contents"* ]]
+}
+
+@test "resolve_path_args errors if path does not exist" {
+    run resolve_path_args "nonexistent_file.py"
+
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"error: file not found: nonexistent_file.py"* ]]
+}
+
+@test "resolve_path_args errors if directory with trailing slash does not exist" {
+    run resolve_path_args "nonexistent_dir/"
+
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"error: directory not found: nonexistent_dir"* ]]
+}

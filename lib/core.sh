@@ -304,6 +304,36 @@ format_files_for_llm() {
   done
 }
 
+resolve_path_args() {
+  local results=""
+  for arg in "$@"; do
+    if [[ $arg == */ ]]; then
+      local dir="${arg%/}"
+      if [ ! -d "$dir" ]; then
+        echo "focal: error: directory not found: $dir" >&2
+        exit 1
+      fi
+      local found
+      found=$(fd --type f --hidden --exclude .git . "$dir")
+      if [ -n "$found" ]; then
+        results+="$found"$'\n'
+      fi
+    elif [ -f "$arg" ]; then
+      results+="$arg"$'\n'
+    elif [ -d "$arg" ]; then
+      echo "focal: error: '$arg' is a directory; append a trailing slash (e.g. '$arg/') to select its contents" >&2
+      exit 1
+    else
+      echo "focal: error: file not found: $arg" >&2
+      exit 1
+    fi
+  done
+
+  if [ -n "$results" ]; then
+    printf "%s" "$results" | awk '!seen[$0]++ && NF'
+  fi
+}
+
 # ------------------------------------------
 # Repository Context Generation
 # ------------------------------------------

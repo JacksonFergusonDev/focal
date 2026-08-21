@@ -69,11 +69,17 @@ focal files --repo https://github.com/JacksonFergusonDev/focal
 
 ### Basic Context Gathering
 
-If you need to feed a specific file or set of files to an LLM, run the interactive selector:
+If you need to feed specific files or directories to an LLM, run the interactive selector or pass paths directly:
 
 ```bash
 # Interactively select files (Tab to multi-select, Enter to confirm)
 focal files
+
+# Pass specific files or directories (directories require a trailing slash)
+focal files src/ justfile
+
+# Generate high-level project summary with pre-selected files or directories
+focal context src/
 ```
 
 ### Git & Working Tree
@@ -130,8 +136,8 @@ focal release-context minor
 
 | Command | Description |
 | --- | --- |
-| `focal files` | Interactively (or via glob) selects multiple files and copies contents + metadata. |
-| `focal context` | Generates a high-level project summary (tree, git status, dependency manifests). |
+| `focal files [paths...]` | Interactively or directly extracts file and directory contents (`dir/` trailing slash syntax). |
+| `focal context [paths...]` | Generates a high-level project summary (tree, git status, manifests) with optional pre-selected files/dirs. |
 | `focal tree` | Generates and copies the repository directory tree, ignoring `.git` and build caches. |
 | `focal api` | Extracts an overview of Python classes and functions using `ripgrep`. |
 | `focal search` | Searches the codebase for a regex pattern and copies the results with surrounding context. |
