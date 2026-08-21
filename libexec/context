@@ -82,16 +82,28 @@ if [ "$mode" == "interactive" ]; then
   fi
 
   # Pass existing core files and preselected files to core.sh to hide them from the fd search stream
-  FOCAL_EXCLUDE_FILES=("${existing_core_files[@]}" "${preselected_files[@]}")
+  FOCAL_EXCLUDE_FILES=()
+  if [ "${#existing_core_files[@]}" -gt 0 ]; then
+    FOCAL_EXCLUDE_FILES+=("${existing_core_files[@]}")
+  fi
+  if [ "${#preselected_files[@]}" -gt 0 ]; then
+    FOCAL_EXCLUDE_FILES+=("${preselected_files[@]}")
+  fi
 
   additional_files=$(interactive_file_select "Additional files: " -m --header "$header")
 elif [ "$mode" == "all" ]; then
   status_info "Discovering all valid files..."
   extra_fd_args=()
-  for excl in "${existing_core_files[@]}"; do
-    extra_fd_args+=("--exclude" "$excl")
-  done
-  additional_files=$(fd --type f --hidden --exclude .git "${extra_fd_args[@]}")
+  if [ "${#existing_core_files[@]}" -gt 0 ]; then
+    for excl in "${existing_core_files[@]}"; do
+      extra_fd_args+=("--exclude" "$excl")
+    done
+  fi
+  if [ "${#extra_fd_args[@]}" -gt 0 ]; then
+    additional_files=$(fd --type f --hidden --exclude .git "${extra_fd_args[@]}")
+  else
+    additional_files=$(fd --type f --hidden --exclude .git)
+  fi
 fi
 
 # 3. Inject Repository Tree and Status

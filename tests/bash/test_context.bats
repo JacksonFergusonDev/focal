@@ -60,11 +60,6 @@ teardown() {
 
     run "$CONTEXT_BIN" -a src/
 
-    if [ "$status" -ne 0 ]; then
-        echo "TEST FAILED WITH STATUS: $status" >&2
-        echo "TEST OUTPUT: $output" >&2
-    fi
-
     [ "$status" -eq 0 ]
     [[ "$output" == *"# src/main.py"* ]]
 }

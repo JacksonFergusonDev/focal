@@ -214,16 +214,25 @@ interactive_file_select() {
 
   # Dynamically build exclusions if the FOCAL_EXCLUDE_FILES array is populated
   local extra_fd_args=()
-  if [ -n "${FOCAL_EXCLUDE_FILES+x}" ] && [ "${#FOCAL_EXCLUDE_FILES[@]}" -gt 0 ]; then
-    for excl in "${FOCAL_EXCLUDE_FILES[@]}"; do
-      extra_fd_args+=("--exclude" "$excl")
-    done
+  if [ -n "${FOCAL_EXCLUDE_FILES+x}" ]; then
+    if [ "${#FOCAL_EXCLUDE_FILES[@]}" -gt 0 ]; then
+      for excl in "${FOCAL_EXCLUDE_FILES[@]}"; do
+        extra_fd_args+=("--exclude" "$excl")
+      done
+    fi
   fi
 
-  fd --type f --hidden --exclude .git "${extra_fd_args[@]}" | fzf "${fzf_args[@]}" \
-    --prompt="$prompt" \
-    --bind "ctrl-a:select-all,ctrl-d:deselect-all" \
-    --preview "${REPO_ROOT}/lib/preview.sh {}" || true
+  if [ "${#extra_fd_args[@]}" -gt 0 ]; then
+    fd --type f --hidden --exclude .git "${extra_fd_args[@]}" | fzf "${fzf_args[@]}" \
+      --prompt="$prompt" \
+      --bind "ctrl-a:select-all,ctrl-d:deselect-all" \
+      --preview "${REPO_ROOT}/lib/preview.sh {}" || true
+  else
+    fd --type f --hidden --exclude .git | fzf "${fzf_args[@]}" \
+      --prompt="$prompt" \
+      --bind "ctrl-a:select-all,ctrl-d:deselect-all" \
+      --preview "${REPO_ROOT}/lib/preview.sh {}" || true
+  fi
 }
 
 format_file_for_llm() {
