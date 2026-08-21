@@ -39,14 +39,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 # 1. Resolve which core context files actually exist in the repo
-core_files=("README.md" "pyproject.toml" "package.json" "requirements.txt" "CONTRIBUTING.md" "Cargo.toml")
 existing_core_files=()
-
-for f in "${core_files[@]}"; do
-  if [ -f "$f" ]; then
-    existing_core_files+=("$f")
-  fi
-done
+while IFS= read -r f; do
+  [ -n "$f" ] && existing_core_files+=("$f")
+done < <(get_existing_core_manifests)
 
 # Resolve any positional pre-selected path arguments
 preselected_files=()

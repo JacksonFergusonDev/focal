@@ -26,8 +26,31 @@ def test_is_priority_logic():
 
 def test_is_noise_logic():
     assert wip_context.is_noise("package-lock.json") is True
+    assert wip_context.is_noise("uv.lock") is True
+    assert wip_context.is_noise("Cargo.lock") is True
     assert wip_context.is_noise("data/weights.h5") is True
+    assert wip_context.is_noise("assets/logo.svg") is True
+    assert wip_context.is_noise("dist/bundle.min.js") is True
     assert wip_context.is_noise("src/main.rs") is False
+    assert wip_context.is_noise("focal/cli.py") is False
+
+
+def test_load_noise_config_fallback(monkeypatch, tmp_path):
+    # Test fallback when noise.json does not exist
+    exts, files = wip_context._load_noise_config()
+    assert ".parquet" in exts
+    assert "uv.lock" in files
+
+    # Verify graceful handling when file is corrupted
+    bad_json = tmp_path / "noise.json"
+    bad_json.write_text("invalid json")
+    with (
+        patch("focal.wip_context.Path.is_file", return_value=True),
+        patch("focal.wip_context.Path.read_text", return_value="invalid json"),
+    ):
+        exts_fallback, files_fallback = wip_context._load_noise_config()
+        assert exts_fallback == set()
+        assert files_fallback == set()
 
 
 def test_run_git_failure():
