@@ -31,14 +31,15 @@ if [[ $EXT == "pdf" ]]; then
   exit 0
 fi
 
-# 3. Detect Binaries
+# 5. Detect Noise / Binaries
 MIME_ENC=$(file -b --mime-encoding "$TARGET" 2>/dev/null || echo "binary")
+FILENAME=$(basename "$TARGET")
 
-if [[ $MIME_ENC == "binary" ]]; then
-  echo -e "\033[1;34m[Binary / Image File Omitted from Preview]\033[0m\n"
+if [[ $EXT =~ $FOCAL_NOISE_REGEX ]] || [[ " ${FOCAL_NOISE_FILES[*]} " =~ [[:space:]]${FILENAME}[[:space:]] ]] || [[ $MIME_ENC == "binary" ]]; then
+  echo -e "\033[1;34m[Binary / Asset File Omitted from Preview]\033[0m\n"
   echo -e "\033[1mFile:\033[0m $TARGET"
-  echo -e "\033[1mType:\033[0m $(file -b "$TARGET")"
-  echo -e "\033[1mSize:\033[0m $(du -h "$TARGET" | awk '{print $1}')"
+  echo -e "\033[1mType:\033[0m $(file -b "$TARGET" 2>/dev/null || echo "Unknown")"
+  echo -e "\033[1mSize:\033[0m $(ls -lh "$TARGET" 2>/dev/null | awk '{print $5}' || echo "0B")"
   exit 0
 fi
 

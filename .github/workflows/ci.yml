@@ -54,7 +54,7 @@ jobs:
       run: uv run pytest
 
     - name: Lint shell scripts with Shellcheck
-      run: find bin libexec lib -maxdepth 1 -type f -exec shellcheck --severity=warning {} +
+      run: find bin libexec lib -maxdepth 1 -type f ! -name "*.json" -exec shellcheck --severity=warning {} +
 
     - name: Run Bash tests
       run: bats tests/bash/

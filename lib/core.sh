@@ -5,25 +5,43 @@
 # ==========================================
 
 # ------------------------------------------
+# Environment & Path Resolution
+# ------------------------------------------
+
+# 1. Path Resolution
+LIB_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
+REPO_ROOT="$(realpath "${LIB_DIR}/..")"
+
+# Explicitly set PYTHONPATH so Python can resolve focal globally
+export PYTHONPATH="${REPO_ROOT}:${PYTHONPATH:-}"
+
+# 2. Smart Python Resolution
+if [ -f "${REPO_ROOT}/.venv/bin/python3" ]; then
+  PYTHON_EXEC="${REPO_ROOT}/.venv/bin/python3"
+elif [ -f "${REPO_ROOT}/libexec/bin/python3" ]; then
+  PYTHON_EXEC="${REPO_ROOT}/libexec/bin/python3"
+else
+  # shellcheck disable=SC2034
+  PYTHON_EXEC="python3"
+fi
+
+# ------------------------------------------
 # Global Noise/Asset Filtering
 # ------------------------------------------
 
-FOCAL_NOISE_EXTS=(
-  # Compiled/Binary Data
-  "parquet" "pkl" "sqlite" "db" "npy" "npz" "h5" "hdf5" "fits" "data" "nc"
-  # Media & Assets
-  "svg" "png" "jpg" "jpeg" "gif" "ico" "webp" "mp4" "webm" "mov" "avi" "mkv" "mp3" "wav"
-  # Frontend build artifacts
-  "min.js" "min.css" "map"
-  # Archives, Lockfiles & Compiled
-  "zip" "tar" "gz" "xz" "bz2" "whl" "pyc" "bin" "exe" "so" "dylib" "dll" "lock"
-)
+NOISE_JSON="${LIB_DIR}/noise.json"
+FOCAL_NOISE_EXTS=()
+FOCAL_NOISE_FILES=()
 
-FOCAL_NOISE_FILES=(
-  "package-lock.json"
-  "pnpm-lock.yaml"
-  "bun.lockb"
-)
+if [ -f "$NOISE_JSON" ]; then
+  while IFS= read -r item; do
+    [ -n "$item" ] && FOCAL_NOISE_EXTS+=("$item")
+  done < <(sed -n '/"extensions": *\[/,/\]/p' "$NOISE_JSON" | grep -o '"[^"]*"' | tr -d '"' | grep -v '^extensions$' || true)
+
+  while IFS= read -r item; do
+    [ -n "$item" ] && FOCAL_NOISE_FILES+=("$item")
+  done < <(sed -n '/"files": *\[/,/\]/p' "$NOISE_JSON" | grep -o '"[^"]*"' | tr -d '"' | grep -v '^files$' || true)
+fi
 
 FOCAL_NOISE_REGEX="^($(
   IFS='|'
@@ -47,25 +65,29 @@ for file in "${FOCAL_NOISE_FILES[@]}"; do
 done
 
 # ------------------------------------------
-# Environment & Path Resolution
+# Core Manifest Definitions
 # ------------------------------------------
 
-# 1. Path Resolution
-LIB_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
-REPO_ROOT="$(realpath "${LIB_DIR}/..")"
+FOCAL_CORE_MANIFESTS=(
+  "README.md"
+  "pyproject.toml"
+  "package.json"
+  "requirements.txt"
+  "CONTRIBUTING.md"
+  "Cargo.toml"
+)
 
-# Explicitly set PYTHONPATH so Python can resolve focal globally
-export PYTHONPATH="${REPO_ROOT}:${PYTHONPATH:-}"
-
-# 2. Smart Python Resolution
-if [ -f "${REPO_ROOT}/.venv/bin/python3" ]; then
-  PYTHON_EXEC="${REPO_ROOT}/.venv/bin/python3"
-elif [ -f "${REPO_ROOT}/libexec/bin/python3" ]; then
-  PYTHON_EXEC="${REPO_ROOT}/libexec/bin/python3"
-else
-  # shellcheck disable=SC2034
-  PYTHON_EXEC="python3"
-fi
+get_existing_core_manifests() {
+  local existing=()
+  for f in "${FOCAL_CORE_MANIFESTS[@]}"; do
+    if [ -f "$f" ]; then
+      existing+=("$f")
+    fi
+  done
+  if [ "${#existing[@]}" -gt 0 ]; then
+    printf "%s\n" "${existing[@]}"
+  fi
+}
 
 # ------------------------------------------
 # Utility Functions
@@ -266,6 +288,14 @@ interactive_file_select() {
   fi
 }
 
+get_file_metadata() {
+  local file="$1"
+  local size meta
+  size=$(ls -lh "$file" 2>/dev/null | awk '{print $5}' || echo "0B")
+  meta=$(file -b "$file" 2>/dev/null || echo "Unknown")
+  printf "Size: %s\nMetadata: %s" "$size" "$meta"
+}
+
 format_file_for_llm() {
   local file="$1"
   local ext="${file##*.}"
@@ -287,22 +317,18 @@ format_file_for_llm() {
   elif [[ $ext_lower == "pdf" ]]; then
     content=$("$PYTHON_EXEC" -m focal pdf "$file")
   elif [[ $ext_lower =~ $FOCAL_NOISE_REGEX ]] || [[ " ${FOCAL_NOISE_FILES[*]} " =~ [[:space:]]${filename}[[:space:]] ]]; then
-    local size
-    size=$(ls -lh "$file" | awk '{print $5}')
-    local meta
-    meta=$(file -b "$file" 2>/dev/null || echo "Unknown")
-    content="[asset/noise file omitted: $file]"$'\n'"Size: $size"$'\n'"Metadata: $meta"
+    local file_meta
+    file_meta=$(get_file_metadata "$file")
+    content="[asset/noise file omitted: $file]"$'\n'"$file_meta"
     status_code=11
   else
     local mime_enc
     mime_enc=$(file -b --mime-encoding "$file" 2>/dev/null || echo "binary")
 
     if [[ $mime_enc == "binary" ]]; then
-      local size
-      size=$(ls -lh "$file" | awk '{print $5}')
-      local meta
-      meta=$(file -b "$file" 2>/dev/null || echo "Unknown")
-      content="[binary file omitted: $file]"$'\n'"Size: $size"$'\n'"Metadata: $meta"
+      local file_meta
+      file_meta=$(get_file_metadata "$file")
+      content="[binary file omitted: $file]"$'\n'"$file_meta"
       status_code=11
     else
       # Global Text Failsafe
@@ -428,8 +454,18 @@ generate_project_context() {
     echo
   fi
 
-  _print_context_file "pyproject.toml" "toml"
-  _print_context_file "package.json" "json"
-  _print_context_file "requirements.txt" "text"
-  _print_context_file "README.md" "markdown"
+  while IFS= read -r f; do
+    if [ -n "$f" ]; then
+      local ext="${f##*.}"
+      local lang="text"
+      case "$ext" in
+        toml) lang="toml" ;;
+        json) lang="json" ;;
+        md) lang="markdown" ;;
+        yaml | yml) lang="yaml" ;;
+        *) lang="text" ;;
+      esac
+      _print_context_file "$f" "$lang"
+    fi
+  done < <(get_existing_core_manifests)
 }

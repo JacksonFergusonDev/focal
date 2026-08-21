@@ -72,7 +72,7 @@ lint:
         printf "{{ yellow }}⚠ markdownlint-cli2 not found. Skipping.{{ nc }}\n"; \
     fi
     if command -v shellcheck >/dev/null 2>&1; then \
-        find bin libexec lib -maxdepth 1 -type f -exec shellcheck --severity=warning {} +; \
+        find bin libexec lib -maxdepth 1 -type f ! -name "*.json" -exec shellcheck --severity=warning {} +; \
     else \
         printf "{{ yellow }}⚠ shellcheck not found. Skipping shell linting.{{ nc }}\n"; \
     fi

@@ -1,5 +1,6 @@
 """Gathers branch topology, commit history, file stats, and diffs for work-in-progress Git branches."""
 
+import json
 import os
 import subprocess
 import sys
@@ -10,65 +11,22 @@ from focal.errors import die
 # Conservative character limit for the diff section (~8k tokens) to maintain high LLM attention
 MAX_DIFF_CHARS = 30000
 
-# Expanded noise extensions covering data formats, serialized objects, media, and archives
-NOISE_EXTENSIONS = {
-    # Data & Serialization
-    ".json",
-    ".xml",
-    ".parquet",
-    ".pkl",
-    ".sqlite",
-    ".db",
-    ".npy",
-    ".npz",
-    ".h5",
-    ".hdf5",
-    ".fits",
-    ".data",
-    ".nc",
-    # Media & Assets
-    ".svg",
-    ".png",
-    ".jpg",
-    ".jpeg",
-    ".gif",
-    ".ico",
-    ".webp",
-    ".pdf",
-    ".mp4",
-    ".webm",
-    ".mov",
-    ".avi",
-    ".mkv",
-    ".mp3",
-    ".wav",
-    # Frontend build artifacts
-    ".min.js",
-    ".min.css",
-    ".map",
-    # Archives & Compiled
-    ".zip",
-    ".tar",
-    ".gz",
-    ".xz",
-    ".bz2",
-    ".whl",
-    ".pyc",
-    ".bin",
-    ".exe",
-    ".so",
-    ".dylib",
-    ".dll",
-}
 
-NOISE_FILES = {
-    "poetry.lock",
-    "uv.lock",
-    "package-lock.json",
-    "yarn.lock",
-    "pnpm-lock.yaml",
-    "Cargo.lock",
-}
+def _load_noise_config() -> tuple[set[str], set[str]]:
+    """Loads noise extensions and noise files from shared noise.json."""
+    noise_path = Path(__file__).resolve().parent.parent / "lib" / "noise.json"
+    if noise_path.is_file():
+        try:
+            data = json.loads(noise_path.read_text(encoding="utf-8"))
+            exts = {f".{ext.lstrip('.')}" for ext in data.get("extensions", [])}
+            files = set(data.get("files", []))
+            return exts, files
+        except Exception:
+            pass
+    return set(), set()
+
+
+NOISE_EXTENSIONS, NOISE_FILES = _load_noise_config()
 
 
 def run_git(args: list[str], check: bool = True) -> tuple[int, str]:
@@ -166,7 +124,7 @@ def is_noise(filepath: str) -> bool:
     path = Path(filepath)
     if path.name in NOISE_FILES:
         return True
-    return path.suffix in NOISE_EXTENSIONS
+    return any(path.name.endswith(ext) for ext in NOISE_EXTENSIONS)
 
 
 def get_diff_for_files(

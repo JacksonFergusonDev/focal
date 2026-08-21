@@ -149,3 +149,43 @@ setup() {
     py_out=$("$PYTHON_EXEC" -c 'import os; os.environ["NO_COLOR"]="1"; from focal.errors import format_warning; print(format_warning("stale cache", hint="run refresh"))')
     [ "$bash_out" = "$py_out" ]
 }
+
+@test "noise config from lib/noise.json populates FOCAL_NOISE_EXTS and FOCAL_NOISE_FILES" {
+    [ "${#FOCAL_NOISE_EXTS[@]}" -gt 0 ]
+    [ "${#FOCAL_NOISE_FILES[@]}" -gt 0 ]
+
+    # Verify key extensions and lockfiles are present
+    [[ " ${FOCAL_NOISE_EXTS[*]} " =~ [[:space:]]parquet[[:space:]] ]]
+    [[ " ${FOCAL_NOISE_EXTS[*]} " =~ [[:space:]]svg[[:space:]] ]]
+    [[ " ${FOCAL_NOISE_FILES[*]} " =~ [[:space:]]uv.lock[[:space:]] ]]
+    [[ " ${FOCAL_NOISE_FILES[*]} " =~ [[:space:]]Cargo.lock[[:space:]] ]]
+}
+
+@test "get_existing_core_manifests discovers existing manifests" {
+    tmpdir=$(mktemp -d)
+    touch "$tmpdir/README.md"
+    touch "$tmpdir/Cargo.toml"
+    touch "$tmpdir/other.txt"
+
+    cd "$tmpdir"
+    run get_existing_core_manifests
+    rm -rf "$tmpdir"
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"README.md"* ]]
+    [[ "$output" == *"Cargo.toml"* ]]
+    [[ "$output" != *"other.txt"* ]]
+    [[ "$output" != *"package.json"* ]]
+}
+
+@test "get_file_metadata formats size and MIME type" {
+    tmpdir=$(mktemp -d)
+    echo "sample test content" > "$tmpdir/sample.txt"
+
+    run get_file_metadata "$tmpdir/sample.txt"
+    rm -rf "$tmpdir"
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Size: "* ]]
+    [[ "$output" == *"Metadata: "* ]]
+}

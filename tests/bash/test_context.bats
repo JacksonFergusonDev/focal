@@ -80,3 +80,16 @@ teardown() {
     [ "$status" -eq 1 ]
     [[ "$output" == *"error: 'src' is a directory; append a trailing slash (e.g. 'src/') to select its contents"* ]]
 }
+
+@test "context auto-includes Cargo.toml and CONTRIBUTING.md manifests" {
+    echo "# Contributing Guidelines" > CONTRIBUTING.md
+    echo "[package]\nname = 'focal'" > Cargo.toml
+    git add .
+    git commit -qm "init"
+
+    run "$CONTEXT_BIN" -c
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"# CONTRIBUTING.md"* ]]
+    [[ "$output" == *"# Cargo.toml"* ]]
+}
