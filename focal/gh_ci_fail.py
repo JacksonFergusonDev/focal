@@ -4,6 +4,7 @@ import re
 import subprocess
 import sys
 
+from focal.errors import die
 from focal.utils import run_gh_json
 
 
@@ -113,7 +114,9 @@ def main() -> None:
             `gh` CLI commands fail to execute.
     """
     if len(sys.argv) != 2:
-        sys.exit("Usage: python -m focal.gh_ci_fail <run_id>")
+        die(
+            "missing run_id argument", hint="usage: python -m focal.gh_ci_fail <run_id>"
+        )
 
     run_id = sys.argv[1]
 
@@ -121,7 +124,10 @@ def main() -> None:
         ["gh", "run", "view", run_id, "--log-failed"], capture_output=True, text=True
     )
     if log_res.returncode != 0:
-        sys.exit(f"Error fetching logs: {log_res.stderr}")
+        die(
+            f"error fetching logs: {log_res.stderr.strip()}",
+            hint="verify that the run ID exists and you have access",
+        )
 
     meta = run_gh_json(
         ["run", "view", run_id, "--json", "name,displayTitle"], exit_on_error=False

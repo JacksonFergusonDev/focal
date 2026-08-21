@@ -3,6 +3,7 @@
 import subprocess
 import sys
 
+from focal.errors import die
 from focal.utils import run_gh_json
 
 
@@ -17,7 +18,7 @@ def main() -> None:
             `gh` CLI commands fail to execute.
     """
     if len(sys.argv) != 2:
-        sys.exit("Usage: python -m focal.gh_pr_diff <pr_id>")
+        die("missing PR ID argument", hint="usage: python -m focal.gh_pr_diff <pr_id>")
 
     pr_id = sys.argv[1]
 
@@ -27,7 +28,10 @@ def main() -> None:
         ["gh", "pr", "diff", pr_id], capture_output=True, text=True
     )
     if diff_res.returncode != 0:
-        sys.exit(f"Error fetching PR diff: {diff_res.stderr}")
+        die(
+            f"error fetching PR diff: {diff_res.stderr.strip()}",
+            hint="verify that the PR exists and you have access",
+        )
 
     parts = [f"# PR #{pr_id}: {data.get('title', 'Unknown')}"]
     parts.append(f"URL: {data.get('url', '')}\n")

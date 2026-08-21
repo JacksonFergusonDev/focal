@@ -69,6 +69,4 @@ def test_main_missing_args():
         with pytest.raises(SystemExit) as exc_info:
             main()
 
-        assert "Usage: python -m focal.gh_issues <issue_id> [issue_id ...]" in str(
-            exc_info.value
-        )
+        assert "missing issue ID(s)" in str(exc_info.value)

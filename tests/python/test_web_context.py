@@ -103,7 +103,7 @@ def test_main_with_empty_stdin():
         with pytest.raises(SystemExit) as exc_info:
             main()
 
-        assert "Error: Received empty piped input." in str(exc_info.value)
+        assert "received empty piped input" in str(exc_info.value)
 
 
 def test_main_missing_args():
@@ -114,7 +114,4 @@ def test_main_missing_args():
         with pytest.raises(SystemExit) as exc_info:
             main()
 
-        assert (
-            "Usage: pbpaste | python -m focal.web_context OR python -m focal.web_context <url>"
-            in str(exc_info.value)
-        )
+        assert "missing URL argument" in str(exc_info.value)

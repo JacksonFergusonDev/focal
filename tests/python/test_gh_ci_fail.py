@@ -37,7 +37,7 @@ def test_gh_ci_fail_main_missing_args():
         with pytest.raises(SystemExit) as exc_info:
             main()
 
-        assert "Usage: python -m focal.gh_ci_fail <run_id>" in str(exc_info.value)
+        assert "missing run_id argument" in str(exc_info.value)
 
 
 def test_gh_ci_fail_main_log_failure():
@@ -53,7 +53,7 @@ def test_gh_ci_fail_main_log_failure():
         with pytest.raises(SystemExit) as exc_info:
             main()
 
-        assert "Error fetching logs: api error" in str(exc_info.value)
+        assert "error fetching logs: api error" in str(exc_info.value)
 
 
 def test_gh_ci_fail_filter_logs():

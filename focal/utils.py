@@ -2,8 +2,9 @@
 
 import json
 import subprocess
-import sys
 from typing import Any
+
+from focal.errors import die, print_error
 
 
 def run_gh_json(args: list[str], exit_on_error: bool = True) -> Any:
@@ -26,17 +27,17 @@ def run_gh_json(args: list[str], exit_on_error: bool = True) -> Any:
     if res.returncode != 0:
         err_msg = f"Error executing gh {' '.join(args)}: {res.stderr.strip()}"
         if exit_on_error:
-            sys.exit(err_msg)
+            die(err_msg)
         else:
-            print(err_msg, file=sys.stderr)
+            print_error(err_msg)
             return None
 
     try:
         return json.loads(res.stdout)
     except json.JSONDecodeError:
-        err_msg = f"Error: Failed to parse JSON output from gh {' '.join(args)}"
+        err_msg = f"Failed to parse JSON output from gh {' '.join(args)}"
         if exit_on_error:
-            sys.exit(err_msg)
+            die(err_msg)
         else:
-            print(err_msg, file=sys.stderr)
+            print_error(err_msg)
             return None

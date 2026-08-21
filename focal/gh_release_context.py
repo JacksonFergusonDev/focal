@@ -4,6 +4,7 @@ import re
 import subprocess
 import sys
 
+from focal.errors import die
 from focal.utils import run_gh_json
 
 
@@ -19,8 +20,9 @@ def main() -> None:
             the `gh` CLI command fails.
     """
     if len(sys.argv) not in (4, 6):
-        sys.exit(
-            "Usage: python -m focal.gh_release_context <tag_date> <header_ref> <tag_ref> [<head_ref> <head_date>]"
+        die(
+            "incorrect number of arguments",
+            hint="usage: python -m focal.gh_release_context <tag_date> <header_ref> <tag_ref> [<head_ref> <head_date>]",
         )
 
     tag_date = sys.argv[1]

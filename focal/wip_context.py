@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from focal.errors import die
+
 # Conservative character limit for the diff section (~8k tokens) to maintain high LLM attention
 MAX_DIFF_CHARS = 30000
 
@@ -88,9 +90,7 @@ def run_git(args: list[str], check: bool = True) -> tuple[int, str]:
         text=True,
     )
     if check and res.returncode != 0:
-        sys.exit(
-            f"Git command failed: git {' '.join(args)}\nError: {res.stderr.strip()}"
-        )
+        die(f"Git command failed: git {' '.join(args)}\nError: {res.stderr.strip()}")
 
     return res.returncode, res.stdout.strip()
 
@@ -113,7 +113,10 @@ def resolve_base_branch(target: str | None) -> str:
     if target:
         code, _ = run_git(["rev-parse", "--verify", target], check=False)
         if code != 0:
-            sys.exit(f"Error: Specified base branch '{target}' does not exist.")
+            die(
+                f"specified base branch '{target}' does not exist",
+                hint="verify the branch name with 'git branch -a'",
+            )
         return target
 
     # Dynamically query the default branch of the remote
@@ -127,10 +130,11 @@ def resolve_base_branch(target: str | None) -> str:
         if code == 0:
             return branch
 
-    sys.exit(
-        "Error: Could not automatically detect a base branch (tried main, master, develop).\n"
-        "Please specify it explicitly: focal wip-context <branch>"
+    die(
+        "could not automatically detect a base branch (tried main, master, develop)",
+        hint="specify it explicitly: focal wip-context <branch>",
     )
+    return ""
 
 
 def is_priority(filepath: str) -> bool:
@@ -255,7 +259,10 @@ def main() -> None:
         ]
     )
     if not topology:
-        sys.exit(f"No divergent commits found between '{target_branch}' and HEAD.")
+        die(
+            f"no divergent commits found between '{target_branch}' and HEAD",
+            hint="create commits on this branch or specify a different base branch: focal wip-context <branch>",
+        )
     topology = topology.strip()
 
     # Layer 2: Macroscopic Map
