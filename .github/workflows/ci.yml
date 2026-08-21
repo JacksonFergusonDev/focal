@@ -22,12 +22,15 @@ jobs:
     # 1. Linux Dependency Routing
     - name: Install System Dependencies (Ubuntu)
       if: runner.os == 'Linux'
-      run: sudo apt-get update && sudo apt-get install -y shellcheck shfmt bats
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y shellcheck shfmt bats fd-find tree
+        sudo ln -sf "$(which fdfind)" /usr/local/bin/fd
 
     # 2. macOS Dependency Routing
     - name: Install System Dependencies (macOS)
       if: runner.os == 'macOS'
-      run: brew install shellcheck shfmt bats-core
+      run: brew install shellcheck shfmt bats-core fd tree
 
     - name: Install uv
       uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
