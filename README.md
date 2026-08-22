@@ -163,7 +163,7 @@ Focal is built on a hybrid architecture designed to deliver sub-millisecond exec
 
 - **Zero-Overhead Bash Dispatcher (`bin/focal` & `libexec/`)**: The top-level entrypoint is a lightweight Bash router. Fast-path commands — like `focal search`, `focal files`, `focal diff`, and `focal tree` — execute directly via compiled binaries (`ripgrep`, `fd`, `fzf`), avoiding Python interpreter startup overhead.
 - **Pure Library Python Engine (`focal/`)**: Python submodules operate as pure library modules with decoupled business logic, centralized subprocess execution (`run_gh`, `run_git`), and bot filtering (`focal.utils`). CLI parsing and validation are consolidated exclusively in `focal/cli.py` via `click`.
-- **Single Source of Truth for Noise & Manifests (`lib/noise.json`)**: All asset/binary extensions and package manager lockfiles are maintained in a shared configuration parsed natively in Bash in `<1ms` and loaded dynamically in Python. Repository manifest discovery is unified across both runtimes.
+- **Single Source of Truth for Noise & Manifests (`lib/noise.json`)**: All asset/binary extensions, multi-part extensions (`.min.js`, `.min.css`), and package manager lockfiles are maintained in a shared configuration parsed natively in Bash in `<1ms` and loaded dynamically in Python. Repository manifest discovery is unified across both runtimes.
 - **Unified Preview Pipeline (`lib/preview.sh`)**: Interactive fuzzy-finding sessions (such as `focal files` and `focal issues`) delegate to a centralized previewer with native notebook parsing, PDF extraction, issue rendering, and automatic fallbacks across `bat`, `batcat`, and `cat`.
 
 A few principles shape the output itself:
@@ -171,7 +171,7 @@ A few principles shape the output itself:
 - **High signal, low noise.** Binary blobs, lockfiles, minified assets, and DOM cruft are aggressively filtered out, so your LLM's attention budget goes to code and text that actually matters.
 - **Clipboard-first.** Every command writes straight to your system clipboard (`pbcopy`, `wl-copy`, `xclip`, or `xsel`) — no intermediate files, no extra steps.
 - **Clear formatting.** Files, diffs, GitHub API responses, and web pages are wrapped in consistent, LLM-optimized markdown blocks, so the model isn't guessing at file paths or context boundaries.
-- **Harmonized diagnostics.** Both Bash and Python layers share identical color palettes, TTY detection (`NO_COLOR` and `TERM=dumb` compliance), and diagnostic formatting (`error`, `warning`, `info`, `done`, `hint`).
+- **Harmonized diagnostics.** Both Bash and Python layers share identical color palettes, TTY detection (`NO_COLOR` and `TERM=dumb` compliance), and diagnostic formatting (`error`, `warning`, `info`, `done`, `hint`), gracefully handling zero-match scenarios with informative status messages.
 - **Fail loud, fail early.** Missing dependencies are caught in a pre-flight check before any context generation starts.
 
 CI enforces strict linting and type-checking across both stacks — `ruff`, `mypy`, `pytest` for Python, and `shellcheck`, `shfmt`, `bats` for shell — to keep the tool itself dependable.
@@ -239,6 +239,7 @@ Focal orchestrates several industry-standard CLI tools to achieve low-latency ex
 - **`fd`**: Required for high-speed file traversal (respects `.gitignore`).
 - **`bat`**: Required for syntax-highlighted TUI previews.
 - **`rg` (ripgrep)**: Required for the `search`, `api`, and `symbol` regex extractors.
+- **`tree`**: Required for directory tree visualization in `tree`, `context`, and `--thick` diffs (v2.0+ recommended).
 - **`gh` (GitHub CLI)**: Required for `pr-diff`, `issues`, `ci-fail`, and `release-context`.
 
 ---
