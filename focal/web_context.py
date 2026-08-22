@@ -9,6 +9,8 @@ from markdownify import markdownify
 
 from focal.errors import die
 
+MAX_OUTPUT_CHARS = 50000
+
 
 def parse_html_to_md(html: str, source_label: str) -> str:
     """Strips noisy DOM elements from HTML and returns clean Markdown.
@@ -45,6 +47,12 @@ def parse_html_to_md(html: str, source_label: str) -> str:
     # Clean up the whitespace graveyard left by decomposed tags
     md = re.sub(r"\n{3,}", "\n\n", md).strip()
 
+    if len(md) > MAX_OUTPUT_CHARS:
+        md = (
+            md[:MAX_OUTPUT_CHARS]
+            + f"\n\n...[web content truncated: exceeded {MAX_OUTPUT_CHARS} characters]"
+        )
+
     return f"# Source: {source_label}\n\n{md}\n"
 
 
@@ -60,6 +68,12 @@ def fetch_url(url: str) -> str:
     Raises:
         SystemExit: If an HTTP error or network failure occurs.
     """
+    if not url.startswith(("http://", "https://")):
+        die(
+            f"Invalid URL scheme in '{url}'",
+            hint="URL must begin with http:// or https://",
+        )
+
     req = urllib.request.Request(
         url,
         headers={
@@ -71,7 +85,7 @@ def fetch_url(url: str) -> str:
             raw_bytes: bytes = response.read()
             charset = response.headers.get_content_charset() or "utf-8"
             return raw_bytes.decode(charset, errors="replace")
-    except urllib.error.URLError as e:
+    except (urllib.error.URLError, Exception) as e:
         die(
             f"Error fetching {url}: {e}",
             hint="check network connectivity or URL validity",

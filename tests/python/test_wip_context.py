@@ -63,26 +63,26 @@ def test_run_git_failure():
 
 
 def test_resolve_base_branch_explicit():
-    with patch("focal.wip_context.run_git") as mock_run_git:
+    with patch("focal.utils.run_git") as mock_run_git:
         mock_run_git.return_value = (0, "")
         assert wip_context.resolve_base_branch("custom") == "custom"
 
 
 def test_resolve_base_branch_dynamic():
-    with patch("focal.wip_context.run_git") as mock_run_git:
+    with patch("focal.utils.run_git") as mock_run_git:
         mock_run_git.side_effect = [(0, "refs/remotes/origin/main")]
         assert wip_context.resolve_base_branch(None) == "main"
 
 
 def test_resolve_base_branch_fallback():
-    with patch("focal.wip_context.run_git") as mock_run_git:
+    with patch("focal.utils.run_git") as mock_run_git:
         # First call fails (symbolic-ref), second fails (main), third succeeds (master)
         mock_run_git.side_effect = [(1, ""), (1, ""), (0, "")]
         assert wip_context.resolve_base_branch(None) == "master"
 
 
 def test_resolve_base_branch_failure():
-    with patch("focal.wip_context.run_git") as mock_run_git:
+    with patch("focal.utils.run_git") as mock_run_git:
         mock_run_git.return_value = (1, "")
         with pytest.raises(SystemExit):
             wip_context.resolve_base_branch(None)
@@ -149,3 +149,49 @@ def test_get_wip_context_success():
         assert "[abcdef] fix" in output
         assert " 1 file changed" in output
         assert "+diff" in output
+
+
+def test_get_wip_context_with_omitted_files(tmp_path):
+    # Create an omitted file in tmp_path
+    asset = tmp_path / "data" / "large_asset.png"
+    asset.parent.mkdir(parents=True)
+    asset.write_bytes(b"x" * 2048)
+
+    with (
+        patch("focal.wip_context.run_git") as mock_run_git,
+        patch("subprocess.run") as mock_subprocess_run,
+    ):
+
+        def mock_git(args, **kwargs):
+            cmd = " ".join(args)
+            if "rev-parse --is-inside-work-tree" in cmd:
+                return 0, "true"
+            if "rev-parse --verify main" in cmd:
+                return 0, ""
+            if "merge-base main HEAD" in cmd:
+                return 0, "abcdef123456"
+            if "rev-parse --short HEAD" in cmd:
+                return 0, "1234567"
+            if "status --porcelain" in cmd:
+                return 0, "M  data/large_asset.png"
+            if "log --name-status" in cmd:
+                return 0, "[abcdef] fix"
+            if "diff --stat" in cmd:
+                return 0, " 1 file changed"
+            if "diff --name-only" in cmd:
+                return 0, "data/large_asset.png"
+            if "diff -M abcdef123456..HEAD -- data/large_asset.png" in cmd:
+                return 0, ""
+            if "rev-parse --show-toplevel" in cmd:
+                return 0, str(tmp_path)
+            return 0, ""
+
+        mock_run_git.side_effect = mock_git
+        mock_res = MagicMock(returncode=0, stdout="PNG image data\n")
+        mock_subprocess_run.return_value = mock_res
+
+        output = wip_context.get_wip_context("main")
+
+        assert "## 4. Omitted Files Metadata" in output
+        assert "- `data/large_asset.png` (Size: 2.0K)" in output
+        assert "- Type: PNG image data" in output

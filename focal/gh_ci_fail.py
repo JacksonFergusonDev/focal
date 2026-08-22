@@ -5,6 +5,26 @@ import re
 from focal.errors import die
 from focal.utils import run_gh, run_gh_json
 
+ERROR_PATTERNS = [
+    "##[error]",
+    "FAILED ",
+    "FAILED:",
+    "FAIL ",
+    "FAIL:",
+    "Traceback (most recent call last):",
+    "Error: ",
+    "error: ",
+    "Exception: ",
+    "ERR! ",
+    "exit status 1",
+    "exit code 1",
+    "not ok ",
+]
+
+
+def _has_error(line: str) -> bool:
+    return any(marker in line for marker in ERROR_PATTERNS)
+
 
 def filter_logs(raw_logs: str) -> str:
     """Processes raw GitHub Actions logs to remove noise.
@@ -58,7 +78,7 @@ def filter_logs(raw_logs: str) -> str:
         elif clean_line.startswith("##[endgroup]"):
             if in_group:
                 group_buffer.append(clean_line)
-                if group_has_error:
+                if group_has_error or any(_has_error(entry) for entry in group_buffer):
                     processed_lines.extend(group_buffer)
                 else:
                     processed_lines.append(
@@ -70,7 +90,7 @@ def filter_logs(raw_logs: str) -> str:
                 processed_lines.append(clean_line)
         elif in_group:
             group_buffer.append(clean_line)
-            if "##[error]" in clean_line:
+            if _has_error(clean_line):
                 group_has_error = True
         else:
             processed_lines.append(clean_line)
@@ -80,7 +100,7 @@ def filter_logs(raw_logs: str) -> str:
         processed_lines.extend(group_buffer)
 
     # Limit output to a window around errors to avoid massive dumps
-    error_indices = [i for i, line in enumerate(processed_lines) if "##[error]" in line]
+    error_indices = [i for i, line in enumerate(processed_lines) if _has_error(line)]
     if not error_indices:
         return "\n".join(processed_lines)
 

@@ -1,12 +1,11 @@
 """Gathers branch topology, commit history, file stats, and diffs for work-in-progress Git branches."""
 
 import json
-import os
 import subprocess
 from pathlib import Path
 
 from focal.errors import die
-from focal.utils import run_git
+from focal.utils import resolve_base_branch, run_git
 
 # Conservative character limit for the diff section (~8k tokens) to maintain high LLM attention
 MAX_DIFF_CHARS = 30000
@@ -27,48 +26,6 @@ def _load_noise_config() -> tuple[set[str], set[str]]:
 
 
 NOISE_EXTENSIONS, NOISE_FILES = _load_noise_config()
-
-
-def resolve_base_branch(target: str | None) -> str:
-    """Determines the target base branch to compare HEAD against.
-
-    If no target is provided, sequentially attempts to verify the existence
-    of 'main', 'master', and 'develop'.
-
-    Args:
-        target: A user-specified branch name, or None.
-
-    Returns:
-        The resolved branch name.
-
-    Raises:
-        SystemExit: If no branch is provided and standard defaults are not found.
-    """
-    if target:
-        code, _ = run_git(["rev-parse", "--verify", target], check=False)
-        if code != 0:
-            die(
-                f"specified base branch '{target}' does not exist",
-                hint="verify the branch name with 'git branch -a'",
-            )
-        return target
-
-    # Dynamically query the default branch of the remote
-    code, out = run_git(["symbolic-ref", "refs/remotes/origin/HEAD"], check=False)
-    if code == 0:
-        return out.split("/")[-1].strip()
-
-    fallbacks = ["main", "master", "develop"]
-    for branch in fallbacks:
-        code, _ = run_git(["rev-parse", "--verify", branch], check=False)
-        if code == 0:
-            return branch
-
-    die(
-        "could not automatically detect a base branch (tried main, master, develop)",
-        hint="specify it explicitly: focal wip-context <branch>",
-    )
-    return ""
 
 
 def is_priority(filepath: str) -> bool:
@@ -262,9 +219,12 @@ def get_wip_context(target_branch: str | None = None) -> str:
 
     if omitted_files:
         parts.append("\n## 4. Omitted Files Metadata")
+        _, repo_root = run_git(["rev-parse", "--show-toplevel"])
+        repo_root_path = Path(repo_root)
         for f in omitted_files:
             try:
-                size_bytes = os.path.getsize(f)
+                full_path = repo_root_path / f
+                size_bytes = full_path.stat().st_size
                 if size_bytes < 1024:
                     size_str = f"{size_bytes}B"
                 elif size_bytes < 1024 * 1024:
@@ -272,7 +232,9 @@ def get_wip_context(target_branch: str | None = None) -> str:
                 else:
                     size_str = f"{size_bytes / (1024 * 1024):.1f}M"
 
-                res = subprocess.run(["file", "-b", f], capture_output=True, text=True)
+                res = subprocess.run(
+                    ["file", "-b", str(full_path)], capture_output=True, text=True
+                )
                 meta = res.stdout.strip() if res.returncode == 0 else "Unknown"
 
                 parts.append(f"- `{f}` (Size: {size_str})\n  - Type: {meta}")

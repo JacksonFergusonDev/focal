@@ -94,3 +94,12 @@ def test_gh_ci_fail_filter_logs():
     raw_logs = "Job Name\tStep Name\t2026-08-10T19:09:40.125Z \x1b[34m==>\x1b[0m \x1b[1mHomebrew is cool\x1b[0m"
     expected = "==> Homebrew is cool"
     assert filter_logs(raw_logs) == expected
+
+    # Test 7: Keeping failed group with unannotated test failure (e.g. pytest or cargo)
+    raw_logs = (
+        "Job Name\tStep Name\t2026-08-10T19:09:40.123Z ##[group]Run tests\n"
+        "Job Name\tStep Name\t2026-08-10T19:09:40.124Z FAILED tests/test_core.py::test_fn - AssertionError\n"
+        "Job Name\tStep Name\t2026-08-10T19:09:40.125Z ##[endgroup]"
+    )
+    expected = "##[group]Run tests\nFAILED tests/test_core.py::test_fn - AssertionError\n##[endgroup]"
+    assert filter_logs(raw_logs) == expected

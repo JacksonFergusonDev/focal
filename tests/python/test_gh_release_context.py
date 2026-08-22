@@ -5,9 +5,11 @@ from focal.gh_release_context import get_release_context
 
 def test_get_release_context_with_prs_and_commits():
     with (
+        patch("focal.gh_release_context.resolve_base_branch") as mock_base,
         patch("focal.gh_release_context.run_gh_json") as mock_run_gh_json,
         patch("focal.gh_release_context.run_git") as mock_run_git,
     ):
+        mock_base.return_value = "main"
         mock_run_gh_json.return_value = [
             {
                 "number": 1,
@@ -21,7 +23,7 @@ def test_get_release_context_with_prs_and_commits():
 
         mock_run_git.return_value = (
             0,
-            "* `a1b2c3d` - Some commit (@user2)\n* `e4f5g6h` - Dependency update (@dependabot[bot])",
+            "a1b2c3d\tRevert change by @dependabot\tAlice\ne4f5g6h\tDependency update\tdependabot[bot]",
         )
 
         output = get_release_context("2023-01-01", "v1.0.0", "v0.9.0")
@@ -34,7 +36,7 @@ def test_get_release_context_with_prs_and_commits():
         assert "<!-- hidden info -->" not in output
 
         assert "## Raw Commits" in output
-        assert "* `a1b2c3d` - Some commit (@user2)" in output
+        assert "* `a1b2c3d` - Revert change by @dependabot (@Alice)" in output
         assert "Dependency update" not in output
 
 
