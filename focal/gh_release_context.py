@@ -2,7 +2,13 @@
 
 import re
 
-from focal.utils import build_bot_exclusion_query, is_bot_author, run_gh_json, run_git
+from focal.utils import (
+    build_bot_exclusion_query,
+    is_bot_author,
+    resolve_base_branch,
+    run_gh_json,
+    run_git,
+)
 
 
 def get_release_context(
@@ -24,8 +30,13 @@ def get_release_context(
     Returns:
         Formatted markdown representation of PRs and commit history between tags.
     """
+    try:
+        base_branch = resolve_base_branch()
+    except Exception:
+        base_branch = "main"
+
     # Filter out standard dependency bots at the query level to preserve token bandwidth
-    search_query = f"is:pr is:merged base:main merged:>={tag_date} "
+    search_query = f"is:pr is:merged base:{base_branch} merged:>={tag_date} "
     if head_date:
         search_query += f"merged:<={head_date} "
 
@@ -78,7 +89,7 @@ def get_release_context(
                 "log",
                 f"{tag_ref}..{head_ref}",
                 "--no-merges",
-                "--format=* `%h` - %s (@%an)",
+                "--format=%h%x09%s%x09%an",
             ],
             check=False,
         )
@@ -87,8 +98,21 @@ def get_release_context(
             commits = []
             for line in log_out.splitlines():
                 line = line.strip()
-                if line and not is_bot_author(line):
-                    commits.append(line)
+                if not line:
+                    continue
+                parts_line = line.split("\t")
+                if len(parts_line) >= 3:
+                    commit_hash, subject, author_name = (
+                        parts_line[0],
+                        parts_line[1],
+                        parts_line[2],
+                    )
+                    if not is_bot_author(author_name):
+                        commits.append(
+                            f"* `{commit_hash}` - {subject} (@{author_name})"
+                        )
+                else:
+                    commits.append(f"* {line}")
 
             if commits:
                 parts.append("## Raw Commits\n")

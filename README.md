@@ -84,10 +84,14 @@ focal context src/
 
 ### Git & Working Tree
 
-To grab the exact state of your current feature branch (uncommitted changes, commit topology, microscopic diffs) compared to `main`:
+To grab the exact state of your current feature branch (uncommitted changes, commit topology, microscopic diffs) compared to your repository's default branch (or specify a custom base branch):
 
 ```bash
+# Automatically detects base branch (main, master, develop, or tracked remote)
 focal wip-context
+
+# Compare against a specific target branch
+focal wip-context release/v1.0
 ```
 
 To quickly grab the diff of your currently staged or uncommitted files (or use `--all` to include untracked files):
@@ -100,10 +104,10 @@ focal diff --all    # All changes (staged, unstaged, and untracked)
 
 ### Web & Documentation Context
 
-You can pipe a library's documentation page directly to your clipboard, stripped of all DOM noise (navbars, scripts, footers):
+You can pipe a library's documentation page directly to your clipboard, stripped of all DOM noise (navbars, scripts, footers) and bounded to 50,000 characters to protect LLM context windows:
 
 ```bash
-# Fetch from a public URL
+# Fetch from a public URL (validates http:// and https://)
 focal web https://docs.python.org/3/
 
 # Parse an authenticated dashboard copied to your clipboard
@@ -112,13 +116,13 @@ pbpaste | focal web
 
 ### GitHub API Context
 
-Need to debug why your GitHub Actions pipeline crashed? Grab the error logs and metadata instantly:
+Need to debug why your GitHub Actions pipeline crashed? Grab the error logs and metadata instantly (preserving test runner failures across groups):
 
 ```bash
 focal ci-fail
 ```
 
-To aggregate a release context by compiling all pull request intents and raw commit history since the last Git tag (or specify `minor` / `major` to synthesize across versions):
+To aggregate a release context by compiling all pull request intents and author-filtered commit history since the last Git tag (or specify `minor` / `major` to synthesize across versions):
 
 ```bash
 # Context since the most recent release tag (default)
@@ -162,13 +166,13 @@ focal release-context minor
 Focal is built on a hybrid architecture designed to deliver sub-millisecond execution for shell operations while maintaining clean, robust Python pipelines for AST, DOM, and API processing:
 
 - **Zero-Overhead Bash Dispatcher (`bin/focal` & `libexec/`)**: The top-level entrypoint is a lightweight Bash router. Fast-path commands — like `focal search`, `focal files`, `focal diff`, and `focal tree` — execute directly via compiled binaries (`ripgrep`, `fd`, `fzf`), avoiding Python interpreter startup overhead.
-- **Pure Library Python Engine (`focal/`)**: Python submodules operate as pure library modules with decoupled business logic, centralized subprocess execution (`run_gh`, `run_git`), and bot filtering (`focal.utils`). CLI parsing and validation are consolidated exclusively in `focal/cli.py` via `click`.
+- **Pure Library Python Engine (`focal/`)**: Python submodules operate as pure library modules with decoupled business logic, centralized subprocess execution (`run_gh`, `run_git`), dynamic remote branch resolution, and author-only bot filtering (`focal.utils`). CLI parsing and validation are consolidated exclusively in `focal/cli.py` via `click`.
 - **Single Source of Truth for Noise & Manifests (`lib/noise.json`)**: All asset/binary extensions, multi-part extensions (`.min.js`, `.min.css`), and package manager lockfiles are maintained in a shared configuration parsed natively in Bash in `<1ms` and loaded dynamically in Python. Repository manifest discovery is unified across both runtimes.
 - **Unified Preview Pipeline (`lib/preview.sh`)**: Interactive fuzzy-finding sessions (such as `focal files` and `focal issues`) delegate to a centralized previewer with native notebook parsing, PDF extraction, issue rendering, and automatic fallbacks across `bat`, `batcat`, and `cat`.
 
 A few principles shape the output itself:
 
-- **High signal, low noise.** Binary blobs, lockfiles, minified assets, and DOM cruft are aggressively filtered out, so your LLM's attention budget goes to code and text that actually matters.
+- **High signal, low noise.** Binary blobs, lockfiles, minified assets, and DOM cruft are aggressively filtered out, and token safety ceilings prevent prompt overflow, so your LLM's attention budget goes to code and text that actually matters.
 - **Clipboard-first.** Every command writes straight to your system clipboard (`pbcopy`, `wl-copy`, `xclip`, or `xsel`) — no intermediate files, no extra steps.
 - **Clear formatting.** Files, diffs, GitHub API responses, and web pages are wrapped in consistent, LLM-optimized markdown blocks, so the model isn't guessing at file paths or context boundaries.
 - **Harmonized diagnostics.** Both Bash and Python layers share identical color palettes, TTY detection (`NO_COLOR` and `TERM=dumb` compliance), and diagnostic formatting (`error`, `warning`, `info`, `done`, `hint`), gracefully handling zero-match scenarios with informative status messages.

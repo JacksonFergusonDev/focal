@@ -159,3 +159,28 @@ def test_bot_helpers():
     assert is_bot_author("Commit message (@dependabot)") is True
     assert is_bot_author("renovate[bot]") is True
     assert is_bot_author("developer") is False
+
+
+def test_resolve_base_branch_with_slashes():
+    from focal.utils import resolve_base_branch
+
+    with patch("focal.utils.run_git") as mock_run_git:
+        mock_run_git.side_effect = [(0, "refs/remotes/origin/release/v1.0\n")]
+        assert resolve_base_branch(None) == "release/v1.0"
+
+
+def test_resolve_base_branch_explicit():
+    from focal.utils import resolve_base_branch
+
+    with patch("focal.utils.run_git") as mock_run_git:
+        mock_run_git.return_value = (0, "")
+        assert resolve_base_branch("custom-branch") == "custom-branch"
+
+
+def test_resolve_base_branch_fallbacks():
+    from focal.utils import resolve_base_branch
+
+    with patch("focal.utils.run_git") as mock_run_git:
+        # symbolic-ref fails, main fails, origin/main fails, master succeeds
+        mock_run_git.side_effect = [(1, ""), (1, ""), (1, ""), (0, "")]
+        assert resolve_base_branch(None) == "master"

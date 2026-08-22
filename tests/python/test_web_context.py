@@ -91,3 +91,17 @@ def test_get_web_context_missing_args():
         get_web_context()
 
     assert "missing URL or HTML input" in str(exc_info.value)
+
+
+def test_parse_html_to_md_truncation():
+    large_html = "<p>" + "A" * 60000 + "</p>"
+    md_output = parse_html_to_md(large_html, "https://example.com/big")
+    assert "...[web content truncated: exceeded 50000 characters]" in md_output
+    assert len(md_output) < 55000
+
+
+def test_fetch_url_invalid_scheme():
+    with pytest.raises(SystemExit) as exc_info:
+        fetch_url("file:///etc/passwd")
+
+    assert "Invalid URL scheme" in str(exc_info.value)

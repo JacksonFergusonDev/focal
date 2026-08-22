@@ -131,3 +131,55 @@ def run_git(args: list[str], check: bool = True) -> tuple[int, str]:
         die(f"Git command failed: git {' '.join(args)}\nError: {res.stderr.strip()}")
 
     return res.returncode, res.stdout.strip()
+
+
+def resolve_base_branch(target: str | None = None) -> str:
+    """Determines the target base branch to compare against.
+
+    If no target is provided, queries the remote default branch or sequentially
+    verifies the existence of 'main', 'master', and 'develop'.
+
+    Args:
+        target: A user-specified branch name, or None.
+
+    Returns:
+        The resolved branch name.
+
+    Raises:
+        SystemExit: If no branch is provided and standard defaults are not found.
+    """
+    if target:
+        code, _ = run_git(["rev-parse", "--verify", target], check=False)
+        if code == 0:
+            return target
+        code, _ = run_git(["rev-parse", "--verify", f"origin/{target}"], check=False)
+        if code == 0:
+            return target
+        die(
+            f"specified base branch '{target}' does not exist",
+            hint="verify the branch name with 'git branch -a'",
+        )
+
+    # Dynamically query the default branch of the remote
+    code, out = run_git(["symbolic-ref", "refs/remotes/origin/HEAD"], check=False)
+    if code == 0:
+        cleaned = out.strip()
+        if cleaned:
+            if cleaned.startswith("refs/remotes/origin/"):
+                return cleaned.removeprefix("refs/remotes/origin/")
+            return cleaned.split("/")[-1]
+
+    fallbacks = ["main", "master", "develop"]
+    for branch in fallbacks:
+        code, _ = run_git(["rev-parse", "--verify", branch], check=False)
+        if code == 0:
+            return branch
+        code, _ = run_git(["rev-parse", "--verify", f"origin/{branch}"], check=False)
+        if code == 0:
+            return branch
+
+    die(
+        "could not automatically detect a base branch (tried main, master, develop)",
+        hint="specify it explicitly: focal wip-context <branch>",
+    )
+    return ""
