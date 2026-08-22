@@ -51,9 +51,8 @@ fi
 
 # 5. Detect Noise / Binaries
 MIME_ENC=$(file -b --mime-encoding "$TARGET" 2>/dev/null || echo "binary")
-FILENAME=$(basename "$TARGET")
 
-if [[ $EXT =~ $FOCAL_NOISE_REGEX ]] || [[ " ${FOCAL_NOISE_FILES[*]} " =~ [[:space:]]${FILENAME}[[:space:]] ]] || [[ $MIME_ENC == "binary" ]]; then
+if is_noise_file "$TARGET" || [[ $MIME_ENC == "binary" ]]; then
   printf "%b\n\n" "${CYAN}${BOLD}[Binary / Asset File Omitted from Preview]${RESET}"
   printf "%b %s\n" "${BOLD}File:${RESET}" "$TARGET"
   printf "%b %s\n" "${BOLD}Type:${RESET}" "$(file -b "$TARGET" 2>/dev/null || echo "Unknown")"

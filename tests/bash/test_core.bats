@@ -235,3 +235,33 @@ EOF
     [[ "$output" == *"Add FZF Preview Support"* ]]
     [[ "$output" == *"Previewing should be fast and unified."* ]]
 }
+
+@test "is_noise_file matches multi-part extensions like min.js and min.css" {
+    run is_noise_file "dist/bundle.min.js"
+    [ "$status" -eq 0 ]
+
+    run is_noise_file "styles/theme.min.css"
+    [ "$status" -eq 0 ]
+
+    run is_noise_file "src/regular.js"
+    [ "$status" -ne 0 ]
+}
+
+@test "is_noise_file handles filenames with special characters safely" {
+    run is_noise_file "component[1].tsx"
+    [ "$status" -ne 0 ]
+
+    run is_noise_file "package-lock.json"
+    [ "$status" -eq 0 ]
+}
+
+@test "format_file_for_llm omits min.js and min.css files as noise" {
+    tmpdir=$(mktemp -d)
+    echo "var x=1;" > "$tmpdir/bundle.min.js"
+
+    run format_file_for_llm "$tmpdir/bundle.min.js"
+    rm -rf "$tmpdir"
+
+    [ "$status" -eq 11 ]
+    [[ "$output" == *"[asset/noise file omitted:"* ]]
+}

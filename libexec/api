@@ -14,4 +14,11 @@ if [[ $# -gt 0 ]] && [[ $1 =~ ^(-h|--help)$ ]]; then
   exit 0
 fi
 
-output_and_copy "$(rg '^(class|def) ')" "API overview copied to clipboard"
+matches=$(rg '^(class|def) ' . || true)
+
+if [ -z "$matches" ]; then
+  status_info "No Python classes or functions found."
+  exit 0
+fi
+
+output_and_copy "$matches" "API overview copied to clipboard"

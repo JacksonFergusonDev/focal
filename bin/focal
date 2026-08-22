@@ -66,6 +66,7 @@ _print_help() {
     local hang_indent="$3" # prefix for continuation lines
     local line="" word=""
     local first=1
+    set -f
     for word in $text; do
       if [ "$first" -eq 1 ]; then
         line="$word"
@@ -78,6 +79,7 @@ _print_help() {
         line="$word"
       fi
     done
+    set +f
     [ -n "$line" ] && printf "%s\n" "$line"
   }
 

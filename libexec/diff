@@ -117,7 +117,8 @@ elif [ "$mode" == "all" ]; then
 
   # Append diffs for untracked files
   if $has_untracked; then
-    for file in $untracked_files; do
+    while IFS= read -r file; do
+      [ -z "$file" ] && continue
       untracked_diff=$(git diff --no-index /dev/null "$file" 2>/dev/null || true)
       if [ -n "$untracked_diff" ]; then
         if [ -n "$diff_output" ]; then
@@ -125,7 +126,7 @@ elif [ "$mode" == "all" ]; then
         fi
         diff_output+="$untracked_diff"
       fi
-    done
+    done <<<"$untracked_files"
   fi
 fi
 
@@ -189,9 +190,9 @@ $(generate_repo_tree)
   elif [ "$mode" == "all" ]; then
     modified_files=$(git diff "$head_ref" --name-only --diff-filter=d "${diff_args[@]}")
     if $has_untracked; then
-      for file in $untracked_files; do
-        modified_files+=$'\n'"$file"
-      done
+      while IFS= read -r file; do
+        [ -n "$file" ] && modified_files+=$'\n'"$file"
+      done <<<"$untracked_files"
     fi
   fi
 
