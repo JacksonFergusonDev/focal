@@ -1,6 +1,7 @@
 """Parses Jupyter notebook (.ipynb) files into clean, LLM-optimized markdown representations."""
 
 import json
+from typing import Any
 
 MAX_OUTPUT_CHARS = 4000
 
@@ -37,7 +38,7 @@ def truncate(text: str) -> str:
     return text
 
 
-def render_output(out: dict) -> str | None:
+def render_output(out: Any) -> str | None:
     """Parses and formats a Jupyter cell output dictionary into markdown.
 
     Extracts stdout streams, error tracebacks, and plain text execution results
@@ -50,6 +51,9 @@ def render_output(out: dict) -> str | None:
         A formatted markdown string representing the cell output, or None if the
         output type is unsupported or completely empty.
     """
+    if not isinstance(out, dict):
+        return None
+
     ot = out.get("output_type")
 
     if ot == "stream":
@@ -74,7 +78,9 @@ def render_output(out: dict) -> str | None:
             return f"```text\n[error]\n{body.rstrip()}\n```"
 
     if ot in {"display_data", "execute_result"}:
-        data = out.get("data", {})
+        data = out.get("data")
+        if not isinstance(data, dict):
+            return None
 
         if any(k.startswith("image/") for k in data):
             return "[image output omitted]"
@@ -100,12 +106,22 @@ def notebook_to_llm_text(path: str) -> str:
     Returns:
         The complete formatted markdown representation of the notebook.
     """
-    with open(path, encoding="utf-8") as f:
-        nb = json.load(f)
+    try:
+        with open(path, encoding="utf-8") as f:
+            nb = json.load(f)
+    except Exception as e:
+        return f"# Notebook: {path}\n\n[Error parsing notebook: {e}]\n"
+
+    if not isinstance(nb, dict):
+        return (
+            f"# Notebook: {path}\n\n[Error parsing notebook: Invalid notebook format]\n"
+        )
 
     parts = [f"# Notebook: {path}"]
 
     for i, cell in enumerate(nb.get("cells", []), start=1):
+        if not isinstance(cell, dict):
+            continue
         ctype = cell.get("cell_type")
 
         if ctype == "markdown":

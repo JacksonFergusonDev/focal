@@ -30,12 +30,15 @@ def pdf_to_llm_text(path: str) -> str:
                     pages.append(text)
 
             content = "\n\n".join(pages)
+            if not content.strip():
+                return f"# PDF: {path}\n\n[PDF contains no extractable text]"
+
             if len(content) > MAX_OUTPUT_CHARS:
                 content = (
                     content[:MAX_OUTPUT_CHARS]
                     + f"\n...[PDF truncated: exceeded {MAX_OUTPUT_CHARS} characters]"
                 )
 
-            return content
+            return f"# PDF: {path}\n\n{content}"
     except Exception as e:
-        return f"[Error parsing PDF: {e}]"
+        return f"# PDF: {path}\n\n[Error parsing PDF: {e}]"

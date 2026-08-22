@@ -31,7 +31,8 @@ def test_process_issue_not_found():
 
         result = process_issue("999")
 
-        assert result == ""
+        assert "# Issue #999" in result
+        assert "[Could not fetch issue details or comments]" in result
 
 
 def test_process_issue_no_description_or_comments():

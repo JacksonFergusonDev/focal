@@ -174,7 +174,7 @@ A few principles shape the output itself:
 
 - **High signal, low noise.** Binary blobs, lockfiles, minified assets, and DOM cruft are aggressively filtered out, and token safety ceilings prevent prompt overflow, so your LLM's attention budget goes to code and text that actually matters.
 - **Clipboard-first.** Every command writes straight to your system clipboard (`pbcopy`, `wl-copy`, `xclip`, or `xsel`) — no intermediate files, no extra steps.
-- **Clear formatting.** Files, diffs, GitHub API responses, and web pages are wrapped in consistent, LLM-optimized markdown blocks, so the model isn't guessing at file paths or context boundaries.
+- **Clear formatting.** Files, Jupyter notebooks (`.ipynb`), PDF documents, diffs, GitHub API responses, and web pages are wrapped in consistent, LLM-optimized markdown blocks without nested fence collisions, so the model isn't guessing at file paths or context boundaries.
 - **Harmonized diagnostics.** Both Bash and Python layers share identical color palettes, TTY detection (`NO_COLOR` and `TERM=dumb` compliance), and diagnostic formatting (`error`, `warning`, `info`, `done`, `hint`), gracefully handling zero-match scenarios with informative status messages.
 - **Fail loud, fail early.** Missing dependencies are caught in a pre-flight check before any context generation starts.
 
