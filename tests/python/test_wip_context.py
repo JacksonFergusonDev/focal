@@ -76,8 +76,8 @@ def test_resolve_base_branch_dynamic():
 
 def test_resolve_base_branch_fallback():
     with patch("focal.utils.run_git") as mock_run_git:
-        # First call fails (symbolic-ref), second fails (main), third succeeds (master)
-        mock_run_git.side_effect = [(1, ""), (1, ""), (0, "")]
+        # First call fails (symbolic-ref), second fails (main), third fails (origin/main), fourth succeeds (master)
+        mock_run_git.side_effect = [(1, ""), (1, ""), (1, ""), (0, "")]
         assert wip_context.resolve_base_branch(None) == "master"
 
 
@@ -116,7 +116,10 @@ def test_get_diff_for_files_binary_or_empty():
 
 
 def test_get_wip_context_success():
-    with patch("focal.wip_context.run_git") as mock_run_git:
+    with (
+        patch("focal.wip_context.run_git") as mock_run_git,
+        patch("focal.utils.run_git") as mock_utils_git,
+    ):
 
         def mock_git(args, **kwargs):
             cmd = " ".join(args)
@@ -141,6 +144,7 @@ def test_get_wip_context_success():
             return 0, ""
 
         mock_run_git.side_effect = mock_git
+        mock_utils_git.side_effect = mock_git
 
         output = wip_context.get_wip_context("main")
 
@@ -159,7 +163,8 @@ def test_get_wip_context_with_omitted_files(tmp_path):
 
     with (
         patch("focal.wip_context.run_git") as mock_run_git,
-        patch("subprocess.run") as mock_subprocess_run,
+        patch("focal.utils.run_git") as mock_utils_git,
+        patch("focal.wip_context.subprocess.run") as mock_subprocess_run,
     ):
 
         def mock_git(args, **kwargs):
@@ -187,6 +192,7 @@ def test_get_wip_context_with_omitted_files(tmp_path):
             return 0, ""
 
         mock_run_git.side_effect = mock_git
+        mock_utils_git.side_effect = mock_git
         mock_res = MagicMock(returncode=0, stdout="PNG image data\n")
         mock_subprocess_run.return_value = mock_res
 

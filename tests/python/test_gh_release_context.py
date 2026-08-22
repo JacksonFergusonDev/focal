@@ -42,9 +42,11 @@ def test_get_release_context_with_prs_and_commits():
 
 def test_get_release_context_no_prs_or_commits():
     with (
+        patch("focal.gh_release_context.resolve_base_branch") as mock_base,
         patch("focal.gh_release_context.run_gh_json") as mock_run_gh_json,
         patch("focal.gh_release_context.run_git") as mock_run_git,
     ):
+        mock_base.return_value = "main"
         mock_run_gh_json.return_value = []
         mock_run_git.return_value = (0, "")
 

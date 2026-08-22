@@ -181,6 +181,6 @@ def test_resolve_base_branch_fallbacks():
     from focal.utils import resolve_base_branch
 
     with patch("focal.utils.run_git") as mock_run_git:
-        # symbolic-ref fails, main fails, master succeeds
-        mock_run_git.side_effect = [(1, ""), (1, ""), (0, "")]
+        # symbolic-ref fails, main fails, origin/main fails, master succeeds
+        mock_run_git.side_effect = [(1, ""), (1, ""), (1, ""), (0, "")]
         assert resolve_base_branch(None) == "master"
