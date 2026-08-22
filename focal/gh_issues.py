@@ -23,7 +23,7 @@ def process_issue(issue_id: str) -> str:
         exit_on_error=False,
     )
     if not data:
-        return ""
+        return f"# Issue #{issue_id}\n\n[Could not fetch issue details or comments]"
 
     parts = [f"# Issue #{issue_id}: {data.get('title', 'Unknown')}"]
     parts.append(f"URL: {data.get('url', '')}\n")

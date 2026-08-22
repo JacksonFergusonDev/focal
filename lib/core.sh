@@ -397,7 +397,11 @@ format_file_for_llm() {
   fi
 
   # Return formatted markdown block
-  printf "# %s\n\`\`\`%s\n%s\n\`\`\`\n\n" "$file" "$ext" "$content"
+  if [[ $ext_lower == "ipynb" ]] || [[ $ext_lower == "pdf" ]]; then
+    printf "%s\n\n" "$content"
+  else
+    printf "# %s\n\`\`\`%s\n%s\n\`\`\`\n\n" "$file" "$ext" "$content"
+  fi
 
   # Transmit status out-of-band
   return "$status_code"

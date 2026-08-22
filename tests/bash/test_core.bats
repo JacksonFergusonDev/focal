@@ -265,3 +265,26 @@ EOF
     [ "$status" -eq 11 ]
     [[ "$output" == *"[asset/noise file omitted:"* ]]
 }
+
+@test "format_file_for_llm formats ipynb files without outer code fences" {
+    tmpdir=$(mktemp -d)
+    cat <<'EOF' > "$tmpdir/test.ipynb"
+{
+  "cells": [
+    {
+      "cell_type": "code",
+      "source": ["print(42)"],
+      "outputs": []
+    }
+  ]
+}
+EOF
+
+    run format_file_for_llm "$tmpdir/test.ipynb"
+    rm -rf "$tmpdir"
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"# Notebook:"* ]]
+    [[ "$output" == *"python"* ]]
+    [[ "$output" != *'```ipynb'* ]]
+}

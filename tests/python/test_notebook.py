@@ -101,3 +101,27 @@ def test_notebook_to_llm_text():
         assert "```python\nprint(1)\n```" in result
         assert "### Output" in result
         assert "```text\n[stdout]\n1\n```" in result
+
+
+def test_notebook_to_llm_text_corrupted_json():
+    with patch("builtins.open", mock_open(read_data="invalid json content")):
+        result = notebook.notebook_to_llm_text("corrupted.ipynb")
+        assert "# Notebook: corrupted.ipynb" in result
+        assert "[Error parsing notebook:" in result
+
+
+def test_notebook_to_llm_text_non_dict_json():
+    with patch("builtins.open", mock_open(read_data="[1, 2, 3]")):
+        result = notebook.notebook_to_llm_text("array.ipynb")
+        assert "# Notebook: array.ipynb" in result
+        assert "[Error parsing notebook: Invalid notebook format]" in result
+
+
+def test_render_output_invalid_data():
+    assert notebook.render_output(None) is None
+    assert (
+        notebook.render_output(
+            {"output_type": "display_data", "data": "not a dictionary"}
+        )
+        is None
+    )
