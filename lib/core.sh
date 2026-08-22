@@ -43,10 +43,29 @@ if [ -f "$NOISE_JSON" ]; then
   done < <(sed -n '/"files": *\[/,/\]/p' "$NOISE_JSON" | grep -o '"[^"]*"' | tr -d '"' | grep -v '^files$' || true)
 fi
 
-FOCAL_NOISE_REGEX="^($(
-  IFS='|'
-  echo "${FOCAL_NOISE_EXTS[*]}"
-))$"
+is_noise_file() {
+  local target="$1"
+  local filename
+  filename=$(basename "$target")
+  local filename_lower
+  filename_lower=$(echo "$filename" | tr '[:upper:]' '[:lower:]')
+
+  for nfile in "${FOCAL_NOISE_FILES[@]}"; do
+    if [ "$filename" = "$nfile" ]; then
+      return 0
+    fi
+  done
+
+  for next in "${FOCAL_NOISE_EXTS[@]}"; do
+    local next_lower
+    next_lower=$(echo "$next" | tr '[:upper:]' '[:lower:]')
+    if [[ $filename_lower == *."$next_lower" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
 
 FD_NOISE_FLAGS=()
 for ext in "${FOCAL_NOISE_EXTS[@]}"; do
@@ -311,12 +330,12 @@ interactive_file_select() {
     fd --type f --hidden --exclude .git "${extra_fd_args[@]}" | fzf "${fzf_args[@]}" \
       --prompt="$prompt" \
       --bind "ctrl-a:select-all,ctrl-d:deselect-all" \
-      --preview "${REPO_ROOT}/lib/preview.sh {}" || true
+      --preview "\"${REPO_ROOT}/lib/preview.sh\" {}" || true
   else
     fd --type f --hidden --exclude .git | fzf "${fzf_args[@]}" \
       --prompt="$prompt" \
       --bind "ctrl-a:select-all,ctrl-d:deselect-all" \
-      --preview "${REPO_ROOT}/lib/preview.sh {}" || true
+      --preview "\"${REPO_ROOT}/lib/preview.sh\" {}" || true
   fi
 }
 
@@ -348,7 +367,7 @@ format_file_for_llm() {
     content=$("$PYTHON_EXEC" -m focal notebook "$file")
   elif [[ $ext_lower == "pdf" ]]; then
     content=$("$PYTHON_EXEC" -m focal pdf "$file")
-  elif [[ $ext_lower =~ $FOCAL_NOISE_REGEX ]] || [[ " ${FOCAL_NOISE_FILES[*]} " =~ [[:space:]]${filename}[[:space:]] ]]; then
+  elif is_noise_file "$file"; then
     local file_meta
     file_meta=$(get_file_metadata "$file")
     content="[asset/noise file omitted: $file]"$'\n'"$file_meta"
@@ -437,7 +456,7 @@ generate_repo_tree() {
   if ! command -v tree >/dev/null 2>&1; then
     status_warn "'tree' command not found."
     status_hint "install tree for repository visualization (e.g., brew install tree)"
-    return 1
+    return 0
   fi
 
   # -a: All files
@@ -448,7 +467,9 @@ generate_repo_tree() {
   # --gitignore: Filter using .gitignore (requires tree v2.0.0+)
   tree -a -F --noreport -L 6 \
     -I '.git|node_modules|.venv|__pycache__|dist|build' \
-    --gitignore 2>/dev/null || true
+    --gitignore 2>/dev/null ||
+    tree -a -F --noreport -L 6 \
+      -I '.git|node_modules|.venv|__pycache__|dist|build' 2>/dev/null || true
 }
 
 _print_context_file() {

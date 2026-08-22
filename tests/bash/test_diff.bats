@@ -103,3 +103,16 @@ teardown() {
     [[ "$output" == *"lock v2"* ]]
     [[ "$output" != *"main.py"* ]]
 }
+
+@test "diff --all handles untracked files with spaces in filename" {
+    echo "initial" > main.py
+    git add . && git commit -q -m "initial commit"
+
+    echo "untracked content" > "file with spaces.txt"
+
+    run "$DIFF_BIN" --all
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"file with spaces.txt"* ]]
+    [[ "$output" == *"untracked content"* ]]
+}

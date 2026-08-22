@@ -13,4 +13,9 @@ if [[ $# -gt 0 ]] && [[ $1 =~ ^(-h|--help)$ ]]; then
   exit 0
 fi
 
-output_and_copy "$(generate_repo_tree)" "Repository tree copied to clipboard"
+tree_output=$(generate_repo_tree || true)
+if [ -z "$tree_output" ]; then
+  exit 0
+fi
+
+output_and_copy "$tree_output" "Repository tree copied to clipboard"

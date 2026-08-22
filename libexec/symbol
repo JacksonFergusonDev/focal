@@ -6,8 +6,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 source "${SCRIPT_DIR}/../lib/core.sh"
 
-require_cmd "rg" "install ripgrep (e.g. 'brew install ripgrep')"
-
 if [[ $# -gt 0 ]] && [[ $1 =~ ^(-h|--help)$ ]]; then
   print_subcommand_help "symbol" \
     "Locates files containing a specific symbol and copies full contents to the clipboard." \
@@ -15,15 +13,24 @@ if [[ $# -gt 0 ]] && [[ $1 =~ ^(-h|--help)$ ]]; then
   exit 0
 fi
 
+require_cmd "rg" "install ripgrep (e.g. 'brew install ripgrep')"
+
 if [ $# -eq 0 ]; then
   die "missing symbol name" "usage: focal symbol <symbol>" 1
 fi
 
-buffer=""
+matching_files=$(rg -l "$1" . || true)
 
-# Format files containing the symbol
-buffer=$(rg -l "$1" | format_files_for_llm)
+if [ -z "$matching_files" ]; then
+  status_info "No files found containing symbol '$1'."
+  exit 0
+fi
 
-[ -z "$buffer" ] && exit 0
+buffer=$(format_files_for_llm <<<"$matching_files")
+
+if [ -z "$buffer" ]; then
+  status_info "No files found containing symbol '$1'."
+  exit 0
+fi
 
 output_and_copy "$buffer" "Symbol context for '$1' copied to clipboard"
