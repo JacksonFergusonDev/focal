@@ -36,7 +36,7 @@ FOCAL_NOISE_FILES=()
 if [ -f "$NOISE_JSON" ]; then
   while IFS= read -r item; do
     [ -n "$item" ] && FOCAL_NOISE_EXTS+=("$item")
-  done < <(sed -n '/"extensions": *\[/,/\]/p' "$NOISE_JSON" | grep -o '"[^"]*"' | tr -d '"' | grep -v '^extensions$' || true)
+  done < <(sed -n '/"extensions": *\[/,/\]/p' "$NOISE_JSON" | grep -o '"[^"]*"' | tr -d '"' | grep -v '^extensions$' | tr '[:upper:]' '[:lower:]' || true)
 
   while IFS= read -r item; do
     [ -n "$item" ] && FOCAL_NOISE_FILES+=("$item")
@@ -45,8 +45,7 @@ fi
 
 is_noise_file() {
   local target="$1"
-  local filename
-  filename=$(basename "$target")
+  local filename="${target##*/}"
   local filename_lower
   filename_lower=$(echo "$filename" | tr '[:upper:]' '[:lower:]')
 
@@ -57,9 +56,7 @@ is_noise_file() {
   done
 
   for next in "${FOCAL_NOISE_EXTS[@]}"; do
-    local next_lower
-    next_lower=$(echo "$next" | tr '[:upper:]' '[:lower:]')
-    if [[ $filename_lower == *."$next_lower" ]]; then
+    if [[ $filename_lower == *."$next" ]]; then
       return 0
     fi
   done
