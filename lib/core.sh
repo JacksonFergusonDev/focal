@@ -236,6 +236,49 @@ require_gh_auth() {
   fi
 }
 
+# Terminal Input Buffer Management
+flush_tty_input() {
+  # Discard unread bytes (e.g. mouse tracking escape sequences from trackpad momentum)
+  # from controlling TTY and standard file descriptors so they do not leak into the shell prompt.
+  "$PYTHON_EXEC" -c '
+import sys, os, select, termios, tty
+try:
+    fd = os.open("/dev/tty", os.O_RDWR | os.O_NONBLOCK)
+    old_settings = termios.tcgetattr(fd)
+    try:
+        # Explicitly flush the input queue
+        termios.tcflush(fd, termios.TCIFLUSH)
+
+        # Put terminal in cbreak mode to read any last stragglers directly
+        tty.setcbreak(fd)
+
+        # 50ms timeout is plenty since the terminal emulator has already stopped
+        # sending mouse events upon fzf exit.
+        r, _, _ = select.select([fd], [], [], 0.05)
+        if r:
+            os.read(fd, 1024)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        os.close(fd)
+except Exception:
+    pass
+' 2>/dev/null || true
+}
+
+focal_fzf() {
+  local ret=0
+  fzf "$@" || ret=$?
+
+  # 1. Fully drain the input buffer so the sequences do not leak into the next shell prompt.
+  flush_tty_input
+
+  # 2. Hide any visual artifacts (like mouse escape sequences) that the OS kernel
+  #    echoed to the terminal before the Python script could disable ECHO mode.
+  printf "\r\033[2K" >/dev/tty 2>/dev/null || true
+
+  return $ret
+}
+
 # ------------------------------------------
 # Clipboard Detection & Output Handling
 # ------------------------------------------
@@ -324,12 +367,12 @@ interactive_file_select() {
   fi
 
   if [ "${#extra_fd_args[@]}" -gt 0 ]; then
-    fd --type f --hidden --exclude .git "${extra_fd_args[@]}" | fzf "${fzf_args[@]}" \
+    fd --type f --hidden --exclude .git "${extra_fd_args[@]}" | focal_fzf "${fzf_args[@]}" \
       --prompt="$prompt" \
       --bind "ctrl-a:select-all,ctrl-d:deselect-all" \
       --preview "\"${REPO_ROOT}/lib/preview.sh\" {}" || true
   else
-    fd --type f --hidden --exclude .git | fzf "${fzf_args[@]}" \
+    fd --type f --hidden --exclude .git | focal_fzf "${fzf_args[@]}" \
       --prompt="$prompt" \
       --bind "ctrl-a:select-all,ctrl-d:deselect-all" \
       --preview "\"${REPO_ROOT}/lib/preview.sh\" {}" || true

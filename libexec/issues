@@ -43,7 +43,7 @@ gh issue list --state "$STATE" --limit 100 --json number,title,state,author,body
 
 selected=$(jq -r '.[] | "\(.number)\t\(.state)\t\(.title)\t(@\(.author.login))"' "$ISSUES_JSON" |
   column -t -s $'\t' |
-  fzf -m \
+  focal_fzf -m \
     --prompt="Select issues: " \
     --header="TAB: multi-select | CTRL-A: select all | ENTER: confirm" \
     --bind "ctrl-a:select-all,ctrl-d:deselect-all" \

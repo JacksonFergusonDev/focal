@@ -57,7 +57,7 @@ if [ -z "$runs" ]; then
   exit 0
 fi
 
-selected=$(echo "$runs" | fzf --prompt="$PROMPT" --header="$HEADER" || true)
+selected=$(echo "$runs" | focal_fzf --prompt="$PROMPT" --header="$HEADER" || true)
 
 [ -z "$selected" ] && exit 0
 

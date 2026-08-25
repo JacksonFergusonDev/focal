@@ -19,7 +19,7 @@ if [ $# -eq 0 ]; then
     require_cmd "fzf" "install fzf (e.g. 'brew install fzf')"
     selected=$(gh pr list --limit 30 --json number,headRefName,title \
       --jq '.[] | "\(.number)\t[\(.headRefName)] \(.title)"' |
-      fzf --prompt="Select PR: " || true)
+      focal_fzf --prompt="Select PR: " || true)
 
     [ -z "$selected" ] && exit 0
     pr_id=$(echo "$selected" | awk -F'\t' '{print $1}')
