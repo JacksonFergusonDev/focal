@@ -128,6 +128,29 @@ def test_code_cell_execution_counts():
         assert "## Code cell 2 [not executed]" in result
 
 
+def test_empty_code_cell_skipped():
+    mock_nb = {
+        "cells": [
+            {
+                "cell_type": "code",
+                "execution_count": None,
+                "source": ["   \n\t  "],
+                "outputs": [],
+            },
+            {
+                "cell_type": "code",
+                "execution_count": 1,
+                "source": ["x = 10"],
+                "outputs": [],
+            },
+        ]
+    }
+    with patch("builtins.open", mock_open(read_data=json.dumps(mock_nb))):
+        result = notebook.notebook_to_llm_text("empty.ipynb")
+        assert "## Code cell 1" not in result
+        assert "## Code cell 2 [execution: 1]" in result
+
+
 def test_notebook_to_llm_text_corrupted_json():
     with patch("builtins.open", mock_open(read_data="invalid json content")):
         result = notebook.notebook_to_llm_text("corrupted.ipynb")

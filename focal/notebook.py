@@ -223,6 +223,8 @@ def notebook_to_llm_text(path: str) -> str:
 
         elif ctype == "code":
             src = join_text(cell.get("source")).rstrip()
+            if not src.strip():
+                continue
 
             exec_count = cell.get("execution_count")
             exec_str = (
