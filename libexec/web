@@ -7,6 +7,8 @@ export FOCAL_OMIT_WORKSPACE=1
 SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 source "${SCRIPT_DIR}/../lib/core.sh"
 
+MAX_OUTPUT_CHARS=50000
+
 print_help() {
   print_subcommand_help "web" \
     "Extracts semantic markdown from public URLs or authenticated piped HTML." \
@@ -16,32 +18,122 @@ print_help() {
     "  pbpaste | focal web                       # Parse clipboard HTML content"
 }
 
-# 1. Check if we have piped input (stdin is not a terminal)
-if [ ! -t 0 ]; then
-  if ! formatted=$(cat | "$PYTHON_EXEC" -m focal web); then
-    exit 1
+truncate_content() {
+  local text="$1"
+  if [ "${#text}" -gt "$MAX_OUTPUT_CHARS" ]; then
+    printf "%s\n\n...[web content truncated: exceeded %d characters]\n" "${text:0:MAX_OUTPUT_CHARS}" "$MAX_OUTPUT_CHARS"
+  else
+    printf "%s\n" "$text"
   fi
+}
+
+require_cmd "curl"
+require_cmd "html-to-markdown" "install html-to-markdown (e.g. 'brew install xberg-io/tap/html-to-markdown' or 'cargo install html-to-markdown-cli')"
+
+err_file=$(mktemp)
+raw_html_file=$(mktemp)
+fetch_err=$(mktemp)
+trap 'rm -f "$err_file" "$raw_html_file" "$fetch_err"' EXIT
+
+# 1. Check for help flags
+if [ "${1:-}" == "-h" ] || [ "${1:-}" == "--help" ] || [ "${1:-}" == "help" ]; then
+  print_help
+  exit 0
+fi
+
+# 2. Process URL argument if provided
+if [ $# -gt 0 ]; then
+  url="$1"
+
+  if [[ $url =~ ^[a-zA-Z][a-zA-Z0-9+.-]*:// ]]; then
+    if [[ ! $url =~ ^https?:// ]]; then
+      die "Invalid URL scheme in '$url'" "URL must begin with http:// or https://" 1
+    fi
+  else
+    url="https://$url"
+  fi
+
+  host=$(echo "$url" | awk -F[/:] '{print $4}')
+
+  http_code=$(curl -sSL --compressed \
+    -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" \
+    -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8" \
+    -H "Accept-Language: en-US,en;q=0.9" \
+    -H 'Sec-Ch-Ua: "Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"' \
+    -H "Sec-Ch-Ua-Mobile: ?0" \
+    -H 'Sec-Ch-Ua-Platform: "macOS"' \
+    -H "Sec-Fetch-Dest: document" \
+    -H "Sec-Fetch-Mode: navigate" \
+    -H "Sec-Fetch-Site: none" \
+    -H "Sec-Fetch-User: ?1" \
+    -H "Upgrade-Insecure-Requests: 1" \
+    --max-time 20 \
+    -o "$raw_html_file" \
+    -w "%{http_code}" \
+    "$url" 2>"$fetch_err" || true)
+
+  case "$http_code" in
+    999)
+      die "HTTP 999 returned by ${host:-$url} (anti-bot protection or login wall)" \
+        "this site blocks automated CLI scrapers. Open the page in your browser and run: pbpaste | focal web" 1
+      ;;
+    403)
+      die "HTTP 403 Forbidden returned by ${host:-$url} (access denied or bot protection)" \
+        "if this page requires login or interactive verification, open it in your browser and run: pbpaste | focal web" 1
+      ;;
+    401)
+      die "HTTP 401 Unauthorized returned by ${host:-$url}" \
+        "this page requires authentication. Log in via your browser, copy the page, and run: pbpaste | focal web" 1
+      ;;
+    404)
+      die "HTTP 404 Not Found returned for $url" \
+        "check that the URL path is spelled correctly" 1
+      ;;
+    *)
+      if [[ ! $http_code =~ ^[23] ]]; then
+        err_msg=$(cat "$fetch_err")
+        if [ "$http_code" == "000" ] || [ -z "$http_code" ]; then
+          die "Error fetching $url: ${err_msg:-connection failed}" "check network connectivity or URL validity" 1
+        else
+          die "HTTP $http_code returned for $url" "check network connectivity or URL validity" 1
+        fi
+      fi
+      ;;
+  esac
+
+  if [ ! -s "$raw_html_file" ]; then
+    die "Error fetching $url: empty response received" "check that the server returned content" 1
+  fi
+
+  if ! md=$(html-to-markdown --preprocess --exclude-selectors "nav,footer,header,aside,button,form,svg" <"$raw_html_file" 2>"$err_file"); then
+    err_msg=$(cat "$err_file")
+    die "failed to parse HTML from $url: ${err_msg:-unknown error}" "the webpage returned invalid HTML content" 1
+  fi
+
+  truncated=$(truncate_content "$md")
+  formatted=$(printf "# Source: %s\n\n%s\n" "$url" "$truncated")
+  output_and_copy "$formatted" "Copied markdown context for $url"
+  exit 0
+fi
+
+# 3. Check for piped input (stdin is not a terminal)
+if [ ! -t 0 ]; then
+  raw_input=$(cat)
+  if [ -z "${raw_input//[[:space:]]/}" ]; then
+    die "received empty piped input" "pipe HTML via stdin or provide a URL argument" 1
+  fi
+
+  if ! md=$(printf "%s" "$raw_input" | html-to-markdown --preprocess --exclude-selectors "nav,footer,header,aside,button,form,svg" 2>"$err_file"); then
+    err_msg=$(cat "$err_file")
+    die "failed to parse HTML input: ${err_msg:-unknown error}" "ensure input is valid HTML" 1
+  fi
+
+  truncated=$(truncate_content "$md")
+  formatted=$(printf "# Source: Piped DOM/Clipboard\n\n%s\n" "$truncated")
   output_and_copy "$formatted" "Copied markdown context from piped HTML"
   exit 0
 fi
 
-# 2. Check for bare execution or help flags
-if [ $# -eq 0 ] || [[ $1 =~ ^(help|-h|--help)$ ]]; then
-  print_help
-
-  # Exit 1 if bare execution (missing required arg), exit 0 if explicitly asked for help
-  if [ $# -eq 0 ]; then exit 1; else exit 0; fi
-fi
-
-# 3. Process URL argument
-url="$1"
-
-if [[ ! $url =~ ^https?:// ]]; then
-  url="https://$url"
-fi
-
-if ! formatted=$("$PYTHON_EXEC" -m focal web "$url"); then
-  exit 1
-fi
-
-output_and_copy "$formatted" "Copied markdown context for $url"
+# 4. Bare execution without arguments or piped input
+print_help
+exit 1

@@ -32,6 +32,18 @@ jobs:
       if: runner.os == 'macOS'
       run: brew install shellcheck shfmt bats-core fd tree ripgrep
 
+    - name: Install html-to-markdown
+      run: |
+        if [ "${{ runner.os }}" = "Linux" ]; then
+          TARGET="x86_64-unknown-linux-musl"
+        elif [ "${{ runner.os }}" = "macOS" ]; then
+          TARGET="aarch64-apple-darwin"
+        fi
+        curl -fsSL "https://github.com/xberg-io/html-to-markdown/releases/download/v3.12.2/cli-${TARGET}.tar.gz" | tar -xz
+        sudo mv "cli-${TARGET}/html-to-markdown" /usr/local/bin/
+        sudo chmod +x /usr/local/bin/html-to-markdown
+        rm -rf "cli-${TARGET}"
+
     - name: Install uv
       uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
       with:

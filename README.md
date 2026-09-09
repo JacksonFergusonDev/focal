@@ -245,6 +245,7 @@ Focal orchestrates several industry-standard CLI tools to achieve low-latency ex
 - **`rg` (ripgrep)**: Required for the `search`, `api`, and `symbol` regex extractors.
 - **`tree`**: Required for directory tree visualization in `tree`, `context`, and `--thick` diffs (v2.0+ recommended).
 - **`gh` (GitHub CLI)**: Required for `pr-diff`, `issues`, `ci-fail`, and `release-context`.
+- **`html-to-markdown`**: Required for semantic markdown extraction in `web` (install via `brew install xberg-io/tap/html-to-markdown` or `cargo install html-to-markdown-cli`).
 
 ---
 
@@ -252,7 +253,7 @@ Focal orchestrates several industry-standard CLI tools to achieve low-latency ex
 
 This repository utilizes a dual-language testing and linting architecture.
 
-- **Python:** 100% type-hinted via `mypy`, formatted with `ruff`, and tested with `pytest`. Subcommands are structured using `click`, and parsing pipelines utilize `beautifulsoup4` and `markdownify` for AST and DOM manipulation.
+- **Python:** 100% type-hinted via `mypy`, formatted with `ruff`, and tested with `pytest`. Subcommands are structured using `click`, with specialized extraction pipelines for Jupyter notebooks and PDF documents.
 - **Bash:** Strictly linted via `shellcheck`, formatted with `shfmt`, and behaviorally tested using the `bats` framework.
 
 To run the complete local CI pipeline before submitting a pull request:
