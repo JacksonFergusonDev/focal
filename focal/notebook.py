@@ -250,4 +250,28 @@ def notebook_to_llm_text(path: str) -> str:
 
             parts.append("\n".join(block))
 
+        elif ctype == "raw":
+            src = join_text(cell.get("source")).rstrip()
+            if not src.strip():
+                continue
+
+            meta_cell = cell.get("metadata")
+            format_val = (
+                meta_cell.get("format") if isinstance(meta_cell, dict) else None
+            )
+            raw_format = (
+                format_val.strip()
+                if isinstance(format_val, str) and format_val.strip()
+                else "text"
+            )
+
+            block = [
+                f"\n## Raw cell {i}",
+                "",
+                f"```{raw_format}",
+                src,
+                "```",
+            ]
+            parts.append("\n".join(block))
+
     return "\n".join(parts).strip() + "\n"

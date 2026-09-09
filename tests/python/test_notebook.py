@@ -151,6 +151,42 @@ def test_empty_code_cell_skipped():
         assert "## Code cell 2 [execution: 1]" in result
 
 
+def test_raw_cell_rendering():
+    mock_nb = {
+        "cells": [
+            {
+                "cell_type": "raw",
+                "source": ["raw text content"],
+            },
+            {
+                "cell_type": "raw",
+                "source": ["   \n  "],
+            },
+        ]
+    }
+    with patch("builtins.open", mock_open(read_data=json.dumps(mock_nb))):
+        result = notebook.notebook_to_llm_text("raw.ipynb")
+        assert "## Raw cell 1" in result
+        assert "```text\nraw text content\n```" in result
+        assert "## Raw cell 2" not in result
+
+
+def test_raw_cell_with_format_metadata():
+    mock_nb = {
+        "cells": [
+            {
+                "cell_type": "raw",
+                "metadata": {"format": "text/restructuredtext"},
+                "source": [".. note::\n   hello"],
+            }
+        ]
+    }
+    with patch("builtins.open", mock_open(read_data=json.dumps(mock_nb))):
+        result = notebook.notebook_to_llm_text("raw_rst.ipynb")
+        assert "## Raw cell 1" in result
+        assert "```text/restructuredtext\n.. note::\n   hello\n```" in result
+
+
 def test_notebook_to_llm_text_corrupted_json():
     with patch("builtins.open", mock_open(read_data="invalid json content")):
         result = notebook.notebook_to_llm_text("corrupted.ipynb")
