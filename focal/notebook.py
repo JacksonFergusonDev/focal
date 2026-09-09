@@ -224,8 +224,15 @@ def notebook_to_llm_text(path: str) -> str:
         elif ctype == "code":
             src = join_text(cell.get("source")).rstrip()
 
+            exec_count = cell.get("execution_count")
+            exec_str = (
+                f"[execution: {exec_count}]"
+                if exec_count is not None
+                else "[not executed]"
+            )
+
             block = [
-                f"\n## Code cell {i}",
+                f"\n## Code cell {i} {exec_str}",
                 "",
                 f"```{lang}",
                 src,

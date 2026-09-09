@@ -83,6 +83,7 @@ def test_notebook_to_llm_text():
             {"cell_type": "markdown", "source": ["# Title\n", "Some text."]},
             {
                 "cell_type": "code",
+                "execution_count": 1,
                 "source": ["print(1)"],
                 "outputs": [
                     {"output_type": "stream", "name": "stdout", "text": ["1\n"]}
@@ -95,12 +96,36 @@ def test_notebook_to_llm_text():
         result = notebook.notebook_to_llm_text("test.ipynb")
 
         assert "# Notebook: test.ipynb" in result
+        assert "## Notebook Metadata" in result
         assert "## Markdown cell 1" in result
         assert "```markdown\n# Title\nSome text.\n```" in result
-        assert "## Code cell 2" in result
+        assert "## Code cell 2 [execution: 1]" in result
         assert "```python\nprint(1)\n```" in result
         assert "### Output" in result
         assert "```text\n[stdout]\n1\n```" in result
+
+
+def test_code_cell_execution_counts():
+    mock_nb = {
+        "cells": [
+            {
+                "cell_type": "code",
+                "execution_count": 42,
+                "source": ["a = 1"],
+                "outputs": [],
+            },
+            {
+                "cell_type": "code",
+                "execution_count": None,
+                "source": ["b = 2"],
+                "outputs": [],
+            },
+        ]
+    }
+    with patch("builtins.open", mock_open(read_data=json.dumps(mock_nb))):
+        result = notebook.notebook_to_llm_text("counts.ipynb")
+        assert "## Code cell 1 [execution: 42]" in result
+        assert "## Code cell 2 [not executed]" in result
 
 
 def test_notebook_to_llm_text_corrupted_json():
