@@ -39,6 +39,21 @@ def truncate(text: str) -> str:
     return text
 
 
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+
+
+def strip_ansi(text: str) -> str:
+    """Strips ANSI escape sequences from text.
+
+    Args:
+        text: The string containing possible ANSI escape sequences.
+
+    Returns:
+        The cleaned string without ANSI formatting sequences.
+    """
+    return _ANSI_RE.sub("", text)
+
+
 def render_output(out: Any) -> str | None:
     """Parses and formats a Jupyter cell output dictionary into markdown.
 
@@ -59,14 +74,19 @@ def render_output(out: Any) -> str | None:
 
     if ot == "stream":
         name = out.get("name", "stdout")
-        text = truncate(join_text(out.get("text", "")))
+        text = truncate(strip_ansi(join_text(out.get("text", ""))))
         if text.strip():
             return f"```text\n[{name}]\n{text.rstrip()}\n```"
 
     if ot == "error":
-        ename = out.get("ename", "")
-        evalue = out.get("evalue", "")
-        tb = "\n".join(out.get("traceback", []))
+        ename = strip_ansi(str(out.get("ename", "")))
+        evalue = strip_ansi(str(out.get("evalue", "")))
+        tb_lines = out.get("traceback", [])
+        tb = (
+            "\n".join(strip_ansi(str(line)) for line in tb_lines)
+            if isinstance(tb_lines, list)
+            else ""
+        )
 
         body = f"{ename}: {evalue}".strip(": ")
 

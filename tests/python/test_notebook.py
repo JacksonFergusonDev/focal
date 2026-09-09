@@ -53,6 +53,28 @@ def test_render_output_error():
     )
 
 
+def test_strip_ansi():
+    text_with_ansi = "\x1b[31;1mError:\x1b[0m \x1b[33mSomething failed\x1b[m"
+    assert notebook.strip_ansi(text_with_ansi) == "Error: Something failed"
+
+
+def test_render_output_error_strips_ansi():
+    payload = {
+        "output_type": "error",
+        "ename": "\x1b[0;31mValueError\x1b[0m",
+        "evalue": "\x1b[1minvalid literal\x1b[0m",
+        "traceback": [
+            "\x1b[0;31mTraceback (most recent call last):\x1b[0m",
+            "  File \x1b[0;32m<stdin>\x1b[0m, line 1",
+        ],
+    }
+    result = notebook.render_output(payload)
+    assert result == (
+        "```text\n[error]\nValueError: invalid literal\n"
+        "Traceback (most recent call last):\n  File <stdin>, line 1\n```"
+    )
+
+
 def test_render_output_error_empty():
     payload = {"output_type": "error", "ename": "", "evalue": "", "traceback": []}
     result = notebook.render_output(payload)
