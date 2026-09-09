@@ -16,7 +16,6 @@ def test_cli_help():
     assert "release-context" in result.output
     assert "notebook" in result.output
     assert "pdf" in result.output
-    assert "web" in result.output
     assert "wip-context" in result.output
 
 
@@ -89,26 +88,6 @@ def test_cli_pdf(tmp_path):
         assert result.exit_code == 0
         assert "PDF text content" in result.output
         mock_fn.assert_called_once_with(str(pdf_file))
-
-
-def test_cli_web_with_url():
-    runner = CliRunner()
-    with patch("focal.cli.get_web_context") as mock_fn:
-        mock_fn.return_value = "# Source: https://example.com"
-        result = runner.invoke(cli, ["web", "https://example.com"])
-        assert result.exit_code == 0
-        assert "# Source: https://example.com" in result.output
-        mock_fn.assert_called_once_with(url="https://example.com")
-
-
-def test_cli_web_with_stdin():
-    runner = CliRunner()
-    with patch("focal.cli.get_web_context") as mock_fn:
-        mock_fn.return_value = "# Source: Piped DOM/Clipboard\n\nHello World"
-        result = runner.invoke(cli, ["web"], input="<p>Hello World</p>")
-        assert result.exit_code == 0
-        assert "Hello World" in result.output
-        mock_fn.assert_called_once_with(html_content="<p>Hello World</p>")
 
 
 def test_cli_wip_context():

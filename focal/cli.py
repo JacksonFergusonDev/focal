@@ -18,23 +18,19 @@ Decision:
        `click.Path` validation, and standardized help formatting with minimal boilerplate
        compared to standard library `argparse` subparsers.
     3. Stream & Pipe Ergonomics: Transparent standard input/output handling makes
-       piped data flows (such as DOM/clipboard ingestion in `web`) clean and idiomatic.
+       piped data flows clean and idiomatic.
     4. Testability: `click.testing.CliRunner` provides isolated, fast unit testing
        without requiring global process mocking or patching `sys.argv`.
 """
 
-import sys
-
 import click
 
-from focal.errors import die
 from focal.gh_ci_fail import get_ci_failure_context
 from focal.gh_issues import format_issues_context
 from focal.gh_pr_diff import get_pr_diff_context
 from focal.gh_release_context import get_release_context
 from focal.notebook import notebook_to_llm_text
 from focal.pdf import pdf_to_llm_text
-from focal.web_context import get_web_context
 from focal.wip_context import get_wip_context
 
 
@@ -98,25 +94,6 @@ def notebook_cmd(path: str) -> None:
 def pdf_cmd(path: str) -> None:
     """Extract and format PDF documents."""
     click.echo(pdf_to_llm_text(path))
-
-
-@cli.command("web")
-@click.argument("url", required=False, default=None)
-def web_cmd(url: str | None) -> None:
-    """Parse webpage from URL or piped HTML."""
-    if url:
-        click.echo(get_web_context(url=url), nl=False)
-        return
-
-    if not sys.stdin.isatty():
-        raw_html = sys.stdin.read()
-        click.echo(get_web_context(html_content=raw_html), nl=False)
-        return
-
-    die(
-        "missing URL argument",
-        hint="usage: pbpaste | focal web OR focal web <url>",
-    )
 
 
 @cli.command("wip-context")

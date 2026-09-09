@@ -9,9 +9,7 @@ authors = [
     { name = "Jackson Ferguson", email = "jackson.ferguson0@gmail.com" }
 ]
 dependencies = [
-    "beautifulsoup4>=4.14.3",
     "click>=8.1.0",
-    "markdownify>=1.2.2",
     "pdfplumber>=0.11.4",
 ]
 classifiers = [

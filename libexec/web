@@ -7,6 +7,8 @@ export FOCAL_OMIT_WORKSPACE=1
 SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 source "${SCRIPT_DIR}/../lib/core.sh"
 
+MAX_OUTPUT_CHARS=50000
+
 print_help() {
   print_subcommand_help "web" \
     "Extracts semantic markdown from public URLs or authenticated piped HTML." \
@@ -16,32 +18,69 @@ print_help() {
     "  pbpaste | focal web                       # Parse clipboard HTML content"
 }
 
-# 1. Check if we have piped input (stdin is not a terminal)
-if [ ! -t 0 ]; then
-  if ! formatted=$(cat | "$PYTHON_EXEC" -m focal web); then
-    exit 1
+truncate_content() {
+  local text="$1"
+  if [ "${#text}" -gt "$MAX_OUTPUT_CHARS" ]; then
+    printf "%s\n\n...[web content truncated: exceeded %d characters]\n" "${text:0:MAX_OUTPUT_CHARS}" "$MAX_OUTPUT_CHARS"
+  else
+    printf "%s\n" "$text"
   fi
+}
+
+require_cmd "html-to-markdown" "install html-to-markdown (e.g. 'brew install xberg-io/tap/html-to-markdown' or 'cargo install html-to-markdown-cli')"
+
+err_file=$(mktemp)
+trap 'rm -f "$err_file"' EXIT
+
+# 1. Check for help flags
+if [ "${1:-}" == "-h" ] || [ "${1:-}" == "--help" ] || [ "${1:-}" == "help" ]; then
+  print_help
+  exit 0
+fi
+
+# 2. Process URL argument if provided
+if [ $# -gt 0 ]; then
+  url="$1"
+
+  if [[ $url =~ ^[a-zA-Z][a-zA-Z0-9+.-]*:// ]]; then
+    if [[ ! $url =~ ^https?:// ]]; then
+      die "Invalid URL scheme in '$url'" "URL must begin with http:// or https://" 1
+    fi
+  else
+    url="https://$url"
+  fi
+
+  user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+
+  if ! md=$(html-to-markdown --url "$url" --user-agent "$user_agent" --preprocess --exclude-selectors "nav,footer,header,aside,button,form,svg" 2>"$err_file"); then
+    err_msg=$(cat "$err_file")
+    die "Error fetching $url: ${err_msg:-unknown error}" "check network connectivity or URL validity" 1
+  fi
+
+  truncated=$(truncate_content "$md")
+  formatted=$(printf "# Source: %s\n\n%s\n" "$url" "$truncated")
+  output_and_copy "$formatted" "Copied markdown context for $url"
+  exit 0
+fi
+
+# 3. Check for piped input (stdin is not a terminal)
+if [ ! -t 0 ]; then
+  raw_input=$(cat)
+  if [ -z "${raw_input//[[:space:]]/}" ]; then
+    die "received empty piped input" "pipe HTML via stdin or provide a URL argument" 1
+  fi
+
+  if ! md=$(printf "%s" "$raw_input" | html-to-markdown --preprocess --exclude-selectors "nav,footer,header,aside,button,form,svg" 2>"$err_file"); then
+    err_msg=$(cat "$err_file")
+    die "failed to parse HTML input: ${err_msg:-unknown error}" "ensure input is valid HTML" 1
+  fi
+
+  truncated=$(truncate_content "$md")
+  formatted=$(printf "# Source: Piped DOM/Clipboard\n\n%s\n" "$truncated")
   output_and_copy "$formatted" "Copied markdown context from piped HTML"
   exit 0
 fi
 
-# 2. Check for bare execution or help flags
-if [ $# -eq 0 ] || [[ $1 =~ ^(help|-h|--help)$ ]]; then
-  print_help
-
-  # Exit 1 if bare execution (missing required arg), exit 0 if explicitly asked for help
-  if [ $# -eq 0 ]; then exit 1; else exit 0; fi
-fi
-
-# 3. Process URL argument
-url="$1"
-
-if [[ ! $url =~ ^https?:// ]]; then
-  url="https://$url"
-fi
-
-if ! formatted=$("$PYTHON_EXEC" -m focal web "$url"); then
-  exit 1
-fi
-
-output_and_copy "$formatted" "Copied markdown context for $url"
+# 4. Bare execution without arguments or piped input
+print_help
+exit 1
