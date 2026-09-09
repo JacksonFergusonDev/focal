@@ -1,6 +1,7 @@
 """Parses Jupyter notebook (.ipynb) files into clean, LLM-optimized markdown representations."""
 
 import json
+import re
 from typing import Any
 
 MAX_OUTPUT_CHARS = 4000
@@ -85,10 +86,35 @@ def render_output(out: Any) -> str | None:
         if any(k.startswith("image/") for k in data):
             return "[image output omitted]"
 
-        text = truncate(join_text(data.get("text/plain", "")))
+        if "text/plain" in data:
+            text = truncate(join_text(data.get("text/plain", "")))
+            if text.strip():
+                return f"```text\n{text.rstrip()}\n```"
 
-        if text.strip():
-            return f"```text\n{text.rstrip()}\n```"
+        if "text/html" in data:
+            raw_html = join_text(data.get("text/html", ""))
+            stripped = re.sub(r"<[^>]+>", "", raw_html)
+            text = truncate(stripped)
+            if text.strip():
+                return f"```text\n{text.rstrip()}\n```"
+
+        if "text/latex" in data:
+            text = truncate(join_text(data.get("text/latex", "")))
+            if text.strip():
+                return f"```latex\n{text.rstrip()}\n```"
+
+        if "application/json" in data:
+            json_payload = data.get("application/json")
+            try:
+                if isinstance(json_payload, (dict, list)):
+                    formatted_json = json.dumps(json_payload, indent=2)
+                else:
+                    formatted_json = str(json_payload)
+                text = truncate(formatted_json)
+                if text.strip():
+                    return f"```json\n{text.rstrip()}\n```"
+            except Exception:
+                pass
 
     return None
 

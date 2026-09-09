@@ -71,6 +71,68 @@ def test_render_output_execute_result_empty():
     assert result is None
 
 
+def test_render_output_html():
+    payload = {
+        "output_type": "display_data",
+        "data": {
+            "text/html": [
+                "<div>\n",
+                "  <table><tr><td>Item</td><td>Value</td></tr></table>\n",
+                "</div>",
+            ]
+        },
+    }
+    result = notebook.render_output(payload)
+    assert result is not None
+    assert "Item" in result
+    assert "Value" in result
+    assert "<table" not in result
+    assert result.startswith("```text\n")
+
+
+def test_render_output_html_empty_after_strip():
+    payload = {
+        "output_type": "display_data",
+        "data": {"text/html": "<div><span>   \n </span></div>"},
+    }
+    assert notebook.render_output(payload) is None
+
+
+def test_render_output_latex():
+    payload = {
+        "output_type": "display_data",
+        "data": {"text/latex": "\\frac{1}{2}"},
+    }
+    result = notebook.render_output(payload)
+    assert result == "```latex\n\\frac{1}{2}\n```"
+
+
+def test_render_output_json():
+    payload = {
+        "output_type": "display_data",
+        "data": {"application/json": {"key": "val", "num": 123}},
+    }
+    result = notebook.render_output(payload)
+    assert result is not None
+    assert result.startswith("```json\n")
+    assert '"key": "val"' in result
+    assert '"num": 123' in result
+
+
+def test_render_output_mime_priority():
+    payload = {
+        "output_type": "display_data",
+        "data": {
+            "application/json": {"k": "v"},
+            "text/latex": "\\alpha",
+            "text/html": "<b>bold</b>",
+            "text/plain": "plain text preference",
+        },
+    }
+    result = notebook.render_output(payload)
+    assert result == "```text\nplain text preference\n```"
+
+
 def test_render_output_unknown_type():
     payload = {"output_type": "unknown"}
     result = notebook.render_output(payload)
