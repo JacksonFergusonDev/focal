@@ -121,6 +121,61 @@ def get_kernel_language(nb: dict[str, Any]) -> str:
     return "python"
 
 
+def build_notebook_metadata_header(nb: dict[str, Any], lang: str) -> str:
+    """Constructs a structured metadata summary of the notebook.
+
+    Args:
+        nb: The parsed notebook JSON dictionary.
+        lang: The detected notebook programming language.
+
+    Returns:
+        Formatted markdown section containing key notebook metadata.
+    """
+    meta_raw = nb.get("metadata")
+    meta = meta_raw if isinstance(meta_raw, dict) else {}
+    ks_raw = meta.get("kernelspec")
+    ks = ks_raw if isinstance(ks_raw, dict) else {}
+    kernel_display = ks.get("display_name") or ks.get("name") or "Unknown"
+
+    nbformat = nb.get("nbformat")
+    nbformat_minor = nb.get("nbformat_minor")
+    if nbformat is not None:
+        format_str = (
+            f"nbformat {nbformat}.{nbformat_minor}"
+            if nbformat_minor is not None
+            else f"nbformat {nbformat}"
+        )
+    else:
+        format_str = "Unknown"
+
+    cells_raw = nb.get("cells")
+    cells = cells_raw if isinstance(cells_raw, list) else []
+    counts: dict[str, int] = {}
+    for cell in cells:
+        if isinstance(cell, dict):
+            ctype = cell.get("cell_type", "unknown")
+            counts[ctype] = counts.get(ctype, 0) + 1
+
+    total = sum(counts.values())
+    code_count = counts.get("code", 0)
+    md_count = counts.get("markdown", 0)
+    raw_count = counts.get("raw", 0)
+
+    breakdown = f"{code_count} code, {md_count} markdown"
+    if raw_count > 0:
+        breakdown += f", {raw_count} raw"
+
+    lines = [
+        "## Notebook Metadata",
+        "",
+        f"- Kernel: {kernel_display}",
+        f"- Language: {lang}",
+        f"- Format: {format_str}",
+        f"- Cells: {total} total ({breakdown})",
+    ]
+    return "\n".join(lines)
+
+
 def notebook_to_llm_text(path: str) -> str:
     """Converts a complete Jupyter notebook into an LLM-optimized markdown document.
 
@@ -145,8 +200,8 @@ def notebook_to_llm_text(path: str) -> str:
             f"# Notebook: {path}\n\n[Error parsing notebook: Invalid notebook format]\n"
         )
 
-    parts = [f"# Notebook: {path}"]
     lang = get_kernel_language(nb)
+    parts = [f"# Notebook: {path}", "", build_notebook_metadata_header(nb, lang)]
 
     for i, cell in enumerate(nb.get("cells", []), start=1):
         if not isinstance(cell, dict):

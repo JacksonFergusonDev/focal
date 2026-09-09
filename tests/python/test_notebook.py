@@ -157,3 +157,35 @@ def test_code_cell_uses_kernel_language():
     with patch("builtins.open", mock_open(read_data=json.dumps(mock_nb))):
         result = notebook.notebook_to_llm_text("test_r.ipynb")
         assert "```r\nx <- c(1, 2, 3)\n```" in result
+
+
+def test_build_notebook_metadata_header():
+    nb = {
+        "nbformat": 4,
+        "nbformat_minor": 5,
+        "metadata": {
+            "kernelspec": {
+                "display_name": "Python 3 (ipykernel)",
+                "name": "python3",
+            }
+        },
+        "cells": [
+            {"cell_type": "code"},
+            {"cell_type": "code"},
+            {"cell_type": "markdown"},
+            {"cell_type": "raw"},
+        ],
+    }
+    header = notebook.build_notebook_metadata_header(nb, "python")
+    assert "## Notebook Metadata" in header
+    assert "- Kernel: Python 3 (ipykernel)" in header
+    assert "- Language: python" in header
+    assert "- Format: nbformat 4.5" in header
+    assert "- Cells: 4 total (2 code, 1 markdown, 1 raw)" in header
+
+
+def test_build_notebook_metadata_header_defaults():
+    header = notebook.build_notebook_metadata_header({}, "python")
+    assert "- Kernel: Unknown" in header
+    assert "- Format: Unknown" in header
+    assert "- Cells: 0 total (0 code, 0 markdown)" in header
