@@ -24,18 +24,20 @@ def join_text(x: list[str] | str | None) -> str:
     return x or ""
 
 
-def truncate(text: str) -> str:
+def truncate(text: str, max_chars: int | None = None) -> str:
     """Truncates text to prevent context window overflow.
 
     Args:
         text: The raw output string to be evaluated.
+        max_chars: Maximum characters to retain before truncation. Defaults to MAX_OUTPUT_CHARS.
 
     Returns:
-        The original string if its length is within `MAX_OUTPUT_CHARS`,
+        The original string if its length is within `max_chars`,
         otherwise a truncated slice appended with an omission notice.
     """
-    if len(text) > MAX_OUTPUT_CHARS:
-        return text[:MAX_OUTPUT_CHARS] + "\n...[output truncated]"
+    limit = MAX_OUTPUT_CHARS if max_chars is None else max_chars
+    if len(text) > limit:
+        return text[:limit] + "\n...[output truncated]"
     return text
 
 
@@ -54,7 +56,7 @@ def strip_ansi(text: str) -> str:
     return _ANSI_RE.sub("", text)
 
 
-def render_output(out: Any) -> str | None:
+def render_output(out: Any, max_chars: int | None = None) -> str | None:
     """Parses and formats a Jupyter cell output dictionary into markdown.
 
     Extracts stdout streams, error tracebacks, and plain text execution results
@@ -62,6 +64,7 @@ def render_output(out: Any) -> str | None:
 
     Args:
         out: A single output payload from a Jupyter notebook code cell.
+        max_chars: Maximum characters to retain before output truncation. Defaults to MAX_OUTPUT_CHARS.
 
     Returns:
         A formatted markdown string representing the cell output, or None if the
@@ -74,7 +77,7 @@ def render_output(out: Any) -> str | None:
 
     if ot == "stream":
         name = out.get("name", "stdout")
-        text = truncate(strip_ansi(join_text(out.get("text", ""))))
+        text = truncate(strip_ansi(join_text(out.get("text", ""))), max_chars=max_chars)
         if text.strip():
             return f"```text\n[{name}]\n{text.rstrip()}\n```"
 
@@ -93,7 +96,7 @@ def render_output(out: Any) -> str | None:
         if tb.strip():
             body = f"{body}\n{tb}"
 
-        body = truncate(body)
+        body = truncate(body, max_chars=max_chars)
 
         if body.strip():
             return f"```text\n[error]\n{body.rstrip()}\n```"
@@ -107,19 +110,19 @@ def render_output(out: Any) -> str | None:
             return "[image output omitted]"
 
         if "text/plain" in data:
-            text = truncate(join_text(data.get("text/plain", "")))
+            text = truncate(join_text(data.get("text/plain", "")), max_chars=max_chars)
             if text.strip():
                 return f"```text\n{text.rstrip()}\n```"
 
         if "text/html" in data:
             raw_html = join_text(data.get("text/html", ""))
             stripped = re.sub(r"<[^>]+>", "", raw_html)
-            text = truncate(stripped)
+            text = truncate(stripped, max_chars=max_chars)
             if text.strip():
                 return f"```text\n{text.rstrip()}\n```"
 
         if "text/latex" in data:
-            text = truncate(join_text(data.get("text/latex", "")))
+            text = truncate(join_text(data.get("text/latex", "")), max_chars=max_chars)
             if text.strip():
                 return f"```latex\n{text.rstrip()}\n```"
 
@@ -130,7 +133,7 @@ def render_output(out: Any) -> str | None:
                     formatted_json = json.dumps(json_payload, indent=2)
                 else:
                     formatted_json = str(json_payload)
-                text = truncate(formatted_json)
+                text = truncate(formatted_json, max_chars=max_chars)
                 if text.strip():
                     return f"```json\n{text.rstrip()}\n```"
             except Exception:
@@ -222,7 +225,7 @@ def build_notebook_metadata_header(nb: dict[str, Any], lang: str) -> str:
     return "\n".join(lines)
 
 
-def notebook_to_llm_text(path: str) -> str:
+def notebook_to_llm_text(path: str, max_output_chars: int = MAX_OUTPUT_CHARS) -> str:
     """Converts a complete Jupyter notebook into an LLM-optimized markdown document.
 
     Iterates sequentially through the notebook's AST, extracting markdown cells,
@@ -231,6 +234,7 @@ def notebook_to_llm_text(path: str) -> str:
 
     Args:
         path: The file system path to the target `.ipynb` file.
+        max_output_chars: Maximum characters to retain per cell output before truncation.
 
     Returns:
         The complete formatted markdown representation of the notebook.
@@ -288,7 +292,7 @@ def notebook_to_llm_text(path: str) -> str:
             ]
 
             for out in cell.get("outputs", []):
-                rendered = render_output(out)
+                rendered = render_output(out, max_chars=max_output_chars)
 
                 if rendered:
                     block.append("\n### Output\n")

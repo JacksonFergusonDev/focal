@@ -74,7 +74,13 @@ def test_cli_notebook(tmp_path):
         result = runner.invoke(cli, ["notebook", str(nb_file)])
         assert result.exit_code == 0
         assert "# Notebook: parsed" in result.output
-        mock_fn.assert_called_once_with(str(nb_file))
+        mock_fn.assert_called_once_with(str(nb_file), max_output_chars=4000)
+
+    with patch("focal.cli.notebook_to_llm_text") as mock_fn:
+        mock_fn.return_value = "# Notebook: parsed"
+        result = runner.invoke(cli, ["notebook", str(nb_file), "--max-output", "500"])
+        assert result.exit_code == 0
+        mock_fn.assert_called_once_with(str(nb_file), max_output_chars=500)
 
 
 def test_cli_pdf(tmp_path):

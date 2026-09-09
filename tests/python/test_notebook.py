@@ -16,6 +16,10 @@ def test_truncate_respects_limits(monkeypatch):
 
     assert notebook.truncate("short") == "short"
     assert notebook.truncate("1234567890_extra") == "1234567890\n...[output truncated]"
+    # Test explicit max_chars parameter
+    assert (
+        notebook.truncate("1234567890", max_chars=5) == "12345\n...[output truncated]"
+    )
 
 
 def test_render_output_stream():
@@ -187,6 +191,26 @@ def test_notebook_to_llm_text():
         assert "```python\nprint(1)\n```" in result
         assert "### Output" in result
         assert "```text\n[stdout]\n1\n```" in result
+
+
+def test_notebook_to_llm_text_custom_max_output():
+    mock_nb = {
+        "cells": [
+            {
+                "cell_type": "code",
+                "execution_count": 1,
+                "source": ["print('a' * 100)"],
+                "outputs": [
+                    {"output_type": "stream", "name": "stdout", "text": ["a" * 100]}
+                ],
+            },
+        ]
+    }
+    with patch("builtins.open", mock_open(read_data=json.dumps(mock_nb))):
+        result = notebook.notebook_to_llm_text("test_trunc.ipynb", max_output_chars=20)
+        assert "...[output truncated]" in result
+        assert "a" * 20 in result
+        assert "a" * 21 not in result
 
 
 def test_code_cell_execution_counts():
