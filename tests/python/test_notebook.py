@@ -125,3 +125,35 @@ def test_render_output_invalid_data():
         )
         is None
     )
+
+
+def test_get_kernel_language_from_kernelspec():
+    nb = {"metadata": {"kernelspec": {"language": "julia"}}}
+    assert notebook.get_kernel_language(nb) == "julia"
+
+
+def test_get_kernel_language_from_language_info():
+    nb = {"metadata": {"language_info": {"name": "R"}}}
+    assert notebook.get_kernel_language(nb) == "r"
+
+
+def test_get_kernel_language_fallback_and_invalid():
+    assert notebook.get_kernel_language({}) == "python"
+    assert notebook.get_kernel_language({"metadata": "not_dict"}) == "python"
+    assert notebook.get_kernel_language({"metadata": {"kernelspec": {}}}) == "python"
+
+
+def test_code_cell_uses_kernel_language():
+    mock_nb = {
+        "metadata": {"kernelspec": {"language": "r"}},
+        "cells": [
+            {
+                "cell_type": "code",
+                "source": ["x <- c(1, 2, 3)"],
+                "outputs": [],
+            }
+        ],
+    }
+    with patch("builtins.open", mock_open(read_data=json.dumps(mock_nb))):
+        result = notebook.notebook_to_llm_text("test_r.ipynb")
+        assert "```r\nx <- c(1, 2, 3)\n```" in result

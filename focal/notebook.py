@@ -93,6 +93,34 @@ def render_output(out: Any) -> str | None:
     return None
 
 
+def get_kernel_language(nb: dict[str, Any]) -> str:
+    """Extracts the notebook programming language from kernelspec or language_info.
+
+    Args:
+        nb: The parsed notebook JSON dictionary.
+
+    Returns:
+        The detected language name in lowercase, or 'python' as default.
+    """
+    meta = nb.get("metadata")
+    if not isinstance(meta, dict):
+        return "python"
+
+    ks = meta.get("kernelspec")
+    if isinstance(ks, dict):
+        lang = ks.get("language")
+        if isinstance(lang, str) and lang.strip():
+            return lang.strip().lower()
+
+    li = meta.get("language_info")
+    if isinstance(li, dict):
+        name = li.get("name")
+        if isinstance(name, str) and name.strip():
+            return name.strip().lower()
+
+    return "python"
+
+
 def notebook_to_llm_text(path: str) -> str:
     """Converts a complete Jupyter notebook into an LLM-optimized markdown document.
 
@@ -118,6 +146,7 @@ def notebook_to_llm_text(path: str) -> str:
         )
 
     parts = [f"# Notebook: {path}"]
+    lang = get_kernel_language(nb)
 
     for i, cell in enumerate(nb.get("cells", []), start=1):
         if not isinstance(cell, dict):
@@ -143,7 +172,7 @@ def notebook_to_llm_text(path: str) -> str:
             block = [
                 f"\n## Code cell {i}",
                 "",
-                "```python",
+                f"```{lang}",
                 src,
                 "```",
             ]
