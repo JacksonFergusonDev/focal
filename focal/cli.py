@@ -29,7 +29,7 @@ from focal.gh_ci_fail import get_ci_failure_context
 from focal.gh_issues import format_issues_context
 from focal.gh_pr_diff import get_pr_diff_context
 from focal.gh_release_context import get_release_context
-from focal.notebook import notebook_to_llm_text
+from focal.notebook import MAX_OUTPUT_CHARS, notebook_to_llm_text
 from focal.pdf import pdf_to_llm_text
 from focal.wip_context import get_wip_context
 
@@ -84,9 +84,16 @@ def release_context_cmd(
 
 @cli.command("notebook")
 @click.argument("path", type=click.Path(exists=True, dir_okay=False, readable=True))
-def notebook_cmd(path: str) -> None:
+@click.option(
+    "--max-output",
+    type=int,
+    default=MAX_OUTPUT_CHARS,
+    show_default=True,
+    help="Max characters per cell output before truncation.",
+)
+def notebook_cmd(path: str, max_output: int) -> None:
     """Extract and format Jupyter notebook (.ipynb) files."""
-    click.echo(notebook_to_llm_text(path), nl=False)
+    click.echo(notebook_to_llm_text(path, max_output_chars=max_output), nl=False)
 
 
 @cli.command("pdf")

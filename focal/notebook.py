@@ -1,6 +1,7 @@
 """Parses Jupyter notebook (.ipynb) files into clean, LLM-optimized markdown representations."""
 
 import json
+import re
 from typing import Any
 
 MAX_OUTPUT_CHARS = 4000
@@ -23,22 +24,39 @@ def join_text(x: list[str] | str | None) -> str:
     return x or ""
 
 
-def truncate(text: str) -> str:
+def truncate(text: str, max_chars: int | None = None) -> str:
     """Truncates text to prevent context window overflow.
 
     Args:
         text: The raw output string to be evaluated.
+        max_chars: Maximum characters to retain before truncation. Defaults to MAX_OUTPUT_CHARS.
 
     Returns:
-        The original string if its length is within `MAX_OUTPUT_CHARS`,
+        The original string if its length is within `max_chars`,
         otherwise a truncated slice appended with an omission notice.
     """
-    if len(text) > MAX_OUTPUT_CHARS:
-        return text[:MAX_OUTPUT_CHARS] + "\n...[output truncated]"
+    limit = MAX_OUTPUT_CHARS if max_chars is None else max_chars
+    if len(text) > limit:
+        return text[:limit] + "\n...[output truncated]"
     return text
 
 
-def render_output(out: Any) -> str | None:
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+
+
+def strip_ansi(text: str) -> str:
+    """Strips ANSI escape sequences from text.
+
+    Args:
+        text: The string containing possible ANSI escape sequences.
+
+    Returns:
+        The cleaned string without ANSI formatting sequences.
+    """
+    return _ANSI_RE.sub("", text)
+
+
+def render_output(out: Any, max_chars: int | None = None) -> str | None:
     """Parses and formats a Jupyter cell output dictionary into markdown.
 
     Extracts stdout streams, error tracebacks, and plain text execution results
@@ -46,6 +64,7 @@ def render_output(out: Any) -> str | None:
 
     Args:
         out: A single output payload from a Jupyter notebook code cell.
+        max_chars: Maximum characters to retain before output truncation. Defaults to MAX_OUTPUT_CHARS.
 
     Returns:
         A formatted markdown string representing the cell output, or None if the
@@ -58,21 +77,26 @@ def render_output(out: Any) -> str | None:
 
     if ot == "stream":
         name = out.get("name", "stdout")
-        text = truncate(join_text(out.get("text", "")))
+        text = truncate(strip_ansi(join_text(out.get("text", ""))), max_chars=max_chars)
         if text.strip():
             return f"```text\n[{name}]\n{text.rstrip()}\n```"
 
     if ot == "error":
-        ename = out.get("ename", "")
-        evalue = out.get("evalue", "")
-        tb = "\n".join(out.get("traceback", []))
+        ename = strip_ansi(str(out.get("ename", "")))
+        evalue = strip_ansi(str(out.get("evalue", "")))
+        tb_lines = out.get("traceback", [])
+        tb = (
+            "\n".join(strip_ansi(str(line)) for line in tb_lines)
+            if isinstance(tb_lines, list)
+            else ""
+        )
 
         body = f"{ename}: {evalue}".strip(": ")
 
         if tb.strip():
             body = f"{body}\n{tb}"
 
-        body = truncate(body)
+        body = truncate(body, max_chars=max_chars)
 
         if body.strip():
             return f"```text\n[error]\n{body.rstrip()}\n```"
@@ -85,15 +109,123 @@ def render_output(out: Any) -> str | None:
         if any(k.startswith("image/") for k in data):
             return "[image output omitted]"
 
-        text = truncate(join_text(data.get("text/plain", "")))
+        if "text/plain" in data:
+            text = truncate(join_text(data.get("text/plain", "")), max_chars=max_chars)
+            if text.strip():
+                return f"```text\n{text.rstrip()}\n```"
 
-        if text.strip():
-            return f"```text\n{text.rstrip()}\n```"
+        if "text/html" in data:
+            raw_html = join_text(data.get("text/html", ""))
+            stripped = re.sub(r"<[^>]+>", "", raw_html)
+            text = truncate(stripped, max_chars=max_chars)
+            if text.strip():
+                return f"```text\n{text.rstrip()}\n```"
+
+        if "text/latex" in data:
+            text = truncate(join_text(data.get("text/latex", "")), max_chars=max_chars)
+            if text.strip():
+                return f"```latex\n{text.rstrip()}\n```"
+
+        if "application/json" in data:
+            json_payload = data.get("application/json")
+            try:
+                if isinstance(json_payload, (dict, list)):
+                    formatted_json = json.dumps(json_payload, indent=2)
+                else:
+                    formatted_json = str(json_payload)
+                text = truncate(formatted_json, max_chars=max_chars)
+                if text.strip():
+                    return f"```json\n{text.rstrip()}\n```"
+            except Exception:
+                pass
 
     return None
 
 
-def notebook_to_llm_text(path: str) -> str:
+def get_kernel_language(nb: dict[str, Any]) -> str:
+    """Extracts the notebook programming language from kernelspec or language_info.
+
+    Args:
+        nb: The parsed notebook JSON dictionary.
+
+    Returns:
+        The detected language name in lowercase, or 'python' as default.
+    """
+    meta = nb.get("metadata")
+    if not isinstance(meta, dict):
+        return "python"
+
+    ks = meta.get("kernelspec")
+    if isinstance(ks, dict):
+        lang = ks.get("language")
+        if isinstance(lang, str) and lang.strip():
+            return lang.strip().lower()
+
+    li = meta.get("language_info")
+    if isinstance(li, dict):
+        name = li.get("name")
+        if isinstance(name, str) and name.strip():
+            return name.strip().lower()
+
+    return "python"
+
+
+def build_notebook_metadata_header(nb: dict[str, Any], lang: str) -> str:
+    """Constructs a structured metadata summary of the notebook.
+
+    Args:
+        nb: The parsed notebook JSON dictionary.
+        lang: The detected notebook programming language.
+
+    Returns:
+        Formatted markdown section containing key notebook metadata.
+    """
+    meta_raw = nb.get("metadata")
+    meta = meta_raw if isinstance(meta_raw, dict) else {}
+    ks_raw = meta.get("kernelspec")
+    ks = ks_raw if isinstance(ks_raw, dict) else {}
+    kernel_display = ks.get("display_name") or ks.get("name") or "Unknown"
+
+    nbformat = nb.get("nbformat")
+    nbformat_minor = nb.get("nbformat_minor")
+    if nbformat is not None:
+        format_str = (
+            f"nbformat {nbformat}.{nbformat_minor}"
+            if nbformat_minor is not None
+            else f"nbformat {nbformat}"
+        )
+    else:
+        format_str = "Unknown"
+
+    cells_raw = nb.get("cells")
+    cells = cells_raw if isinstance(cells_raw, list) else []
+    counts: dict[str, int] = {}
+    for cell in cells:
+        if isinstance(cell, dict):
+            ctype = cell.get("cell_type", "unknown")
+            counts[ctype] = counts.get(ctype, 0) + 1
+
+    total = sum(counts.values())
+    code_count = counts.get("code", 0)
+    md_count = counts.get("markdown", 0)
+    raw_count = counts.get("raw", 0)
+
+    breakdown = f"{code_count} code, {md_count} markdown"
+    if raw_count > 0:
+        breakdown += f", {raw_count} raw"
+
+    lines = [
+        "## Notebook Metadata",
+        "",
+        f"- Kernel: {kernel_display}",
+        f"- Language: {lang}",
+        f"- Format: {format_str}",
+        f"- Cells: {total} total ({breakdown})",
+    ]
+    return "\n".join(lines)
+
+
+def notebook_to_llm_text(path: str, max_output_chars: int = MAX_OUTPUT_CHARS) -> str:
     """Converts a complete Jupyter notebook into an LLM-optimized markdown document.
 
     Iterates sequentially through the notebook's AST, extracting markdown cells,
@@ -102,6 +234,7 @@ def notebook_to_llm_text(path: str) -> str:
 
     Args:
         path: The file system path to the target `.ipynb` file.
+        max_output_chars: Maximum characters to retain per cell output before truncation.
 
     Returns:
         The complete formatted markdown representation of the notebook.
@@ -117,7 +250,8 @@ def notebook_to_llm_text(path: str) -> str:
             f"# Notebook: {path}\n\n[Error parsing notebook: Invalid notebook format]\n"
         )
 
-    parts = [f"# Notebook: {path}"]
+    lang = get_kernel_language(nb)
+    parts = [f"# Notebook: {path}", "", build_notebook_metadata_header(nb, lang)]
 
     for i, cell in enumerate(nb.get("cells", []), start=1):
         if not isinstance(cell, dict):
@@ -139,22 +273,55 @@ def notebook_to_llm_text(path: str) -> str:
 
         elif ctype == "code":
             src = join_text(cell.get("source")).rstrip()
+            if not src.strip():
+                continue
+
+            exec_count = cell.get("execution_count")
+            exec_str = (
+                f"[execution: {exec_count}]"
+                if exec_count is not None
+                else "[not executed]"
+            )
 
             block = [
-                f"\n## Code cell {i}",
+                f"\n## Code cell {i} {exec_str}",
                 "",
-                "```python",
+                f"```{lang}",
                 src,
                 "```",
             ]
 
             for out in cell.get("outputs", []):
-                rendered = render_output(out)
+                rendered = render_output(out, max_chars=max_output_chars)
 
                 if rendered:
                     block.append("\n### Output\n")
                     block.append(rendered)
 
+            parts.append("\n".join(block))
+
+        elif ctype == "raw":
+            src = join_text(cell.get("source")).rstrip()
+            if not src.strip():
+                continue
+
+            meta_cell = cell.get("metadata")
+            format_val = (
+                meta_cell.get("format") if isinstance(meta_cell, dict) else None
+            )
+            raw_format = (
+                format_val.strip()
+                if isinstance(format_val, str) and format_val.strip()
+                else "text"
+            )
+
+            block = [
+                f"\n## Raw cell {i}",
+                "",
+                f"```{raw_format}",
+                src,
+                "```",
+            ]
             parts.append("\n".join(block))
 
     return "\n".join(parts).strip() + "\n"
