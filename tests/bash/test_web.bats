@@ -74,3 +74,19 @@ setup() {
     [ "$status" -eq 0 ]
     [[ "$output" == *"...[web content truncated: exceeded 50000 characters]"* ]]
 }
+
+@test "web surfaces anti-bot hint on HTTP 999" {
+    run "$WEB_BIN" https://www.linkedin.com/in/jackson--ferguson/
+
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"error: HTTP 999 returned by www.linkedin.com"* ]]
+    [[ "$output" == *"hint: this site blocks automated CLI scrapers. Open the page in your browser and run: pbpaste | focal web"* ]]
+}
+
+@test "web surfaces not found hint on HTTP 404" {
+    run "$WEB_BIN" https://httpbin.org/status/404
+
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"error: HTTP 404 Not Found"* ]]
+    [[ "$output" == *"hint: check that the URL path is spelled correctly"* ]]
+}
