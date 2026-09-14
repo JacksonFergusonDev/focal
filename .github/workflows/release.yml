@@ -8,7 +8,7 @@ on:
 jobs:
   sync-homebrew:
     name: Delegate Homebrew Update
-    uses: JacksonFergusonDev/ci-cd-tooling/.github/workflows/update-homebrew-local.yml@main
+    uses: JacksonFergusonDev/ci-cd-release-infrastructure/.github/workflows/update-homebrew-local.yml@cff447baf1076b8807502ab8da7d2f0867a973fc # main
     with:
       tag: ${{ github.ref_name }}
       formula_path: "Formula/focal.rb"
