@@ -181,6 +181,7 @@ if [[ -n $REPO_URL ]]; then
     mkdir -p "$FOCAL_CACHE_DIR"
     status_info "Cloning remote repository into cache..."
     git clone --filter=blob:none "$REPO_URL" "$REPO_CACHE_PATH" >&2
+    mark_repo_created "$REPO_CACHE_PATH"
   else
     status_info "Updating cached remote repository..."
     git -C "$REPO_CACHE_PATH" fetch --all >&2
@@ -191,6 +192,9 @@ if [[ -n $REPO_URL ]]; then
     git -C "$REPO_CACHE_PATH" remote set-head origin -a >&2 || true
     git -C "$REPO_CACHE_PATH" reset --hard origin/HEAD >&2 || true
   fi
+
+  mark_repo_accessed "$REPO_CACHE_PATH"
+  cleanup_stale_cached_repos "$FOCAL_CACHE_DIR"
 
   cd "$REPO_CACHE_PATH"
 
