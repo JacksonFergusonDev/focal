@@ -566,3 +566,66 @@ generate_project_context() {
     fi
   done < <(get_existing_core_manifests)
 }
+
+# ------------------------------------------
+# Remote Cache Management
+# ------------------------------------------
+
+mark_repo_created() {
+  local repo_path="$1"
+  if [ -d "${repo_path}/.git" ]; then
+    touch "${repo_path}/.git/.focal_created"
+  fi
+}
+
+mark_repo_accessed() {
+  local repo_path="$1"
+  if [ -d "${repo_path}/.git" ]; then
+    touch "${repo_path}/.git/.focal_accessed"
+  fi
+}
+
+cleanup_stale_cached_repos() {
+  local cache_dir="$1"
+  local ttl_days="${2:-${FOCAL_REPO_TTL_DAYS:-30}}"
+  local force="${3:-false}"
+
+  if [ ! -d "$cache_dir" ]; then
+    return 0
+  fi
+
+  local sentinel="${cache_dir}/.last_cleanup"
+  local now
+  now=$(date +%s)
+
+  # Check throttling (unless force=true)
+  if [ "$force" != "true" ] && [ -f "$sentinel" ]; then
+    local last_run
+    last_run=$(cat "$sentinel" 2>/dev/null || echo 0)
+    if [[ $last_run =~ ^[0-9]+$ ]] && ((now - last_run < 86400)); then
+      return 0
+    fi
+  fi
+
+  # Record new cleanup run time
+  echo "$now" >"$sentinel" 2>/dev/null || true
+
+  local repo_dir
+  for repo_dir in "$cache_dir"/*; do
+    [ -d "$repo_dir" ] || continue
+    local marker="${repo_dir}/.git/.focal_accessed"
+
+    # If it lacks the access marker (legacy/untracked), prune it
+    if [ ! -f "$marker" ]; then
+      status_info "Pruning legacy cached repository: $(basename "$repo_dir")"
+      rm -rf "$repo_dir"
+      continue
+    fi
+
+    # If it hasn't been accessed within ttl_days, prune it
+    if [ -n "$(find "$marker" -mtime +"$ttl_days" 2>/dev/null)" ]; then
+      status_info "Pruning stale cached repository: $(basename "$repo_dir")"
+      rm -rf "$repo_dir"
+    fi
+  done
+}

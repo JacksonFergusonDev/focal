@@ -288,3 +288,87 @@ EOF
     [[ "$output" == *"python"* ]]
     [[ "$output" != *'```ipynb'* ]]
 }
+
+@test "mark_repo_created creates .git/.focal_created" {
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/.git"
+
+    run mark_repo_created "$tmpdir"
+    [ "$status" -eq 0 ]
+    [ -f "$tmpdir/.git/.focal_created" ]
+
+    rm -rf "$tmpdir"
+}
+
+@test "mark_repo_accessed creates and updates .git/.focal_accessed" {
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/.git"
+
+    run mark_repo_accessed "$tmpdir"
+    [ "$status" -eq 0 ]
+    [ -f "$tmpdir/.git/.focal_accessed" ]
+
+    rm -rf "$tmpdir"
+}
+
+@test "cleanup_stale_cached_repos prunes legacy repos without .focal_accessed" {
+    cache_dir=$(mktemp -d)
+    legacy_repo="$cache_dir/legacy_repo"
+    mkdir -p "$legacy_repo/.git"
+
+    active_repo="$cache_dir/active_repo"
+    mkdir -p "$active_repo/.git"
+    touch "$active_repo/.git/.focal_accessed"
+
+    run cleanup_stale_cached_repos "$cache_dir" 30 true
+
+    [ "$status" -eq 0 ]
+    [ ! -d "$legacy_repo" ]
+    [ -d "$active_repo" ]
+    [[ "$output" == *"Pruning legacy cached repository: legacy_repo"* ]]
+
+    rm -rf "$cache_dir"
+}
+
+@test "cleanup_stale_cached_repos prunes stale repos older than TTL while preserving active repos" {
+    cache_dir=$(mktemp -d)
+    stale_repo="$cache_dir/stale_repo"
+    mkdir -p "$stale_repo/.git"
+    touch -t 202001010000 "$stale_repo/.git/.focal_accessed"
+
+    active_repo="$cache_dir/active_repo"
+    mkdir -p "$active_repo/.git"
+    touch "$active_repo/.git/.focal_accessed"
+
+    run cleanup_stale_cached_repos "$cache_dir" 30 true
+
+    [ "$status" -eq 0 ]
+    [ ! -d "$stale_repo" ]
+    [ -d "$active_repo" ]
+    [[ "$output" == *"Pruning stale cached repository: stale_repo"* ]]
+
+    rm -rf "$cache_dir"
+}
+
+@test "cleanup_stale_cached_repos throttles cleanup when .last_cleanup is recent" {
+    cache_dir=$(mktemp -d)
+    sentinel="$cache_dir/.last_cleanup"
+    date +%s > "$sentinel"
+
+    stale_repo="$cache_dir/stale_repo"
+    mkdir -p "$stale_repo/.git"
+    touch -t 202001010000 "$stale_repo/.git/.focal_accessed"
+
+    # Should skip because sentinel is fresh and force=false
+    run cleanup_stale_cached_repos "$cache_dir" 30 false
+
+    [ "$status" -eq 0 ]
+    [ -d "$stale_repo" ]
+
+    # Forcing cleanup should prune it
+    run cleanup_stale_cached_repos "$cache_dir" 30 true
+    [ "$status" -eq 0 ]
+    [ ! -d "$stale_repo" ]
+
+    rm -rf "$cache_dir"
+}
