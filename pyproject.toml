@@ -25,6 +25,7 @@ classifiers = [
 ]
 
 [project.urls]
+Author = "https://jacksonferguson.me"
 Repository = "https://github.com/JacksonFergusonDev/focal"
 Issues = "https://github.com/JacksonFergusonDev/focal/issues"
 
