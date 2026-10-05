@@ -122,15 +122,115 @@ Need to debug why your GitHub Actions pipeline crashed? Grab the error logs and 
 focal ci-fail
 ```
 
-To aggregate a release context by compiling all pull request intents and author-filtered commit history since the last Git tag (or specify `minor` / `major` to synthesize across versions):
+To collect release evidence from an exact Git range, with associated PR descriptions,
+changed paths, unmatched commits, and a net diffstat:
 
 ```bash
-# Context since the most recent release tag (default)
-focal release-context
+# Draft the next release using the built-in prompt and previous release style
+focal release-context --version v1.2.0
 
-# Synthesize changes across patch bumps since the last minor release
+# Infer the release version when the target is already tagged
+focal release-context --head v1.1.0
+
+# Compare since the previous minor release (x.y.0)
 focal release-context minor
+
+# Inspect an explicit historical release
+focal release-context --base v1.0.0 --head v1.1.0
+
+# Draft a tagged release even after HEAD has advanced
+focal release-context --version v1.1.0 --previous-release v1.0.0
+
+# Include a focused net diff (repeat --path for multiple pathspecs)
+focal release-context --diff --path src/ --path tests/
+
+# Select a particular previous GitHub release as the style reference
+focal release-context --version v1.2.0 --previous-release v1.1.0
+
+# Expand bot updates and append current checkout background
+focal release-context --bots include --project-context
+
+# Save the payload instead of copying it to the clipboard
+focal release-context > release-context.md
 ```
+
+The payload starts with a request to write a GitHub release title and description.
+Use `--version` to name a release. If that exact tag exists locally, it becomes
+the target commit automatically, even when `HEAD` has moved past it. Without a
+local version tag, the target defaults to `HEAD` for an upcoming release.
+An explicit `--head` always overrides this selection, including `--head HEAD`.
+Without `--version`, the version is inferred from a tag at the target commit when
+possible, or left as `vX.Y.Z` for confirmation.
+The prompt asks for release notes matching the previous release's structure and
+tone, supported by the current range's evidence.
+
+The previous GitHub release's title, description, tag, and URL are fetched through
+`gh`. Automatic selection uses the nearest locally reachable published stable
+release before the target commit, independent of the comparison base. Releases at
+the target commit, drafts, and prereleases are excluded. `--previous-release <tag>`
+selects a style reference explicitly, including a prerelease or a tag not available
+locally, without changing release membership. Release listings are fully paginated;
+missing references and lookup failures are reported without discarding Git evidence.
+
+Tracked image and video assets at the target commit are included in an inventory
+with commit-pinned file and raw URLs. Future, untracked, and symlink assets are not
+included. URLs use the repository host returned by `gh`; unavailable repository
+URLs produce placeholders. The inventory proves local path existence, not remote
+availability or suitability. The prompt asks the writer to inspect relevant assets,
+keep every repository asset link pinned to the full target SHA, and use labeled
+placeholders when a link cannot be resolved. A separate verification checklist
+lists proposed assets and unresolved links for review before publishing. Links from
+the previous release must also be pinned to the new release commit before reuse.
+
+Git ancestry determines which commits belong to the release. GitHub supplies merged
+PR associations for those commits, across all target branches, without merge-date
+filters or a 100-PR ceiling. Commits appear once, grouped under a PR or listed as
+unmatched. Merge commits are included. PR descriptions have hidden HTML comments
+removed; changed paths reflect only the commits included in the range.
+
+The default base is the nearest reachable stable `vMAJOR.MINOR.PATCH` or
+`MAJOR.MINOR.PATCH` tag. `minor` selects `x.y.0`; `major` selects `x.0.0`.
+Prerelease and non-version tags are ignored. When the target is itself tagged,
+the previous matching tag is used. Without a matching tag, all history reachable
+from the selected head is included, including root commits. An explicit `--base`
+is exclusive and the target head is inclusive. Fetch full history and tags before collecting
+release context; shallow checkouts are flagged in the payload.
+
+Bot updates are summarized by default. Use `--bots include` for full details or
+`--bots exclude` to omit their detail. The net diffstat and optional diff always
+include bot changes. `--diff` includes the full net diff unless repeatable `--path`
+Git pathspecs focus it; path filters do not change release membership or the diffstat.
+Output defaults to an approximate 24,000-token budget (four characters per token).
+A PR index covers collected PRs before the overall limit is applied. Long PR
+bodies use 800-character excerpts; detailed commit and path lists show up to five
+entries per PR with omission counts. The release-impact summary and completeness
+notes are retained when the overall payload is clipped, and a prominent warning
+marks incomplete output. Use `--max-tokens 0` for full detail or increase the budget.
+Optional project background is also subject to the overall budget.
+
+The payload records resolved endpoint SHAs, counts, exclusions, ambiguous PR
+associations, and failed lookups. GitHub failures preserve local commit evidence
+with a warning. Cherry-picks without a GitHub association remain unmatched;
+commit subjects are not used to guess PR attribution. When several PRs are
+associated with one commit, an exact merge SHA match is preferred, then the lowest
+PR number, and all alternatives are noted. PR descriptions reflect current GitHub
+metadata, which may have changed since the release. PR associations are batched in groups of 20 commits per GraphQL request.
+Overflow connections use fully paginated REST lookups, without a PR count ceiling.
+Changed paths for the entire range are collected with one local Git log invocation
+(using first-parent merge diffs; requires Git 2.31 or later).
+
+GitHub progress is printed to stderr, leaving piped Markdown clean. Requests are
+noninteractive, with a 10-second process timeout and a shared 60-second GitHub
+collection budget. Override these with `--request-timeout` and `--github-timeout`.
+Timeouts terminate the `gh` process group, including credential helpers. Rate limits,
+authentication failures, and connection failures stop further remote requests;
+there are no automatic retries or waits for quota resets. Local Git evidence is
+still returned, with incomplete enrichment and skipped associations reported.
+The GitHub budget does not limit local Git processing or optional project background.
+
+`--project-context` appends the current checkout's directory tree (six levels),
+Git status, and core manifests (first 500 lines each). It is labeled separately
+from the historical release snapshot. This background is omitted by default.
 
 ---
 
@@ -156,7 +256,7 @@ focal release-context minor
 | `focal diff` | Copies a formatted git diff of uncommitted, staged (`--staged`), or all (`--all`) changes, including status and summary context. |
 | `focal pr-diff` | Fetches metadata, description intent, and the full code diff for a GitHub Pull Request. |
 | `focal issues` | Interactively selects and copies GitHub issue descriptions alongside their comment threads. |
-| `focal release-context` | Copies metadata, PR intent, and raw commit history since the last release tag (supports `minor`, `major`, `patch`). |
+| `focal release-context` | Copies exact release membership, PR intent, changed paths, and net impact; supports focused diffs and configurable bot detail. |
 | `focal ci-fail` | Fetches and formats GitHub Actions CI failure logs for debugging. |
 
 ---

@@ -63,23 +63,85 @@ def pr_diff_cmd(pr_id: str) -> None:
 
 
 @cli.command("release-context")
-@click.argument("tag_date")
-@click.argument("header_ref")
-@click.argument("tag_ref")
-@click.argument("head_ref", default="HEAD", required=False)
-@click.argument("head_date", default=None, required=False)
+@click.option("--base", "base_ref", default=None)
+@click.option(
+    "--head",
+    "head_ref",
+    default=None,
+    help="Explicit target ref; overrides version-tag selection.",
+)
+@click.option(
+    "--level", type=click.Choice(["patch", "minor", "major"]), default="patch"
+)
+@click.option(
+    "--bots", type=click.Choice(["summary", "include", "exclude"]), default="summary"
+)
+@click.option("--diff", "include_diff", is_flag=True)
+@click.option("--path", "paths", multiple=True)
+@click.option(
+    "--version",
+    default=None,
+    help="Release version to draft; an existing local tag selects the target unless --head is given.",
+)
+@click.option(
+    "--previous-release",
+    default=None,
+    help="GitHub release tag to use as the style reference.",
+)
+@click.option(
+    "--request-timeout",
+    type=click.FloatRange(min=0, min_open=True),
+    default=10,
+    show_default=True,
+    help="Maximum seconds per GitHub request.",
+)
+@click.option(
+    "--github-timeout",
+    type=click.FloatRange(min=0, min_open=True),
+    default=60,
+    show_default=True,
+    help="Total seconds available for GitHub enrichment.",
+)
+@click.option(
+    "--max-tokens",
+    type=click.IntRange(min=0),
+    default=24000,
+    show_default=True,
+    help="Approximate output budget; 0 disables the limit.",
+)
 def release_context_cmd(
-    tag_date: str,
-    header_ref: str,
-    tag_ref: str,
-    head_ref: str,
-    head_date: str | None,
+    base_ref: str | None,
+    head_ref: str | None,
+    level: str,
+    bots: str,
+    include_diff: bool,
+    paths: tuple[str, ...],
+    version: str | None,
+    previous_release: str | None,
+    request_timeout: float,
+    github_timeout: float,
+    max_tokens: int,
 ) -> None:
-    """Collect merged pull requests and git commit histories for releases."""
-    output = get_release_context(
-        tag_date, header_ref, tag_ref, head_ref=head_ref, head_date=head_date
+    """Collect Git release membership, PR intent, and net impact."""
+    if 0 < max_tokens < 1000:
+        raise click.UsageError("--max-tokens must be 0 or at least 1000")
+    if paths and not include_diff:
+        raise click.UsageError("--path requires --diff")
+    click.echo(
+        get_release_context(
+            base_ref,
+            head_ref,
+            level,
+            bots,
+            include_diff,
+            paths,
+            version=version,
+            previous_release=previous_release,
+            request_timeout=request_timeout,
+            github_timeout=github_timeout,
+            max_tokens=max_tokens,
+        )
     )
-    click.echo(output)
 
 
 @cli.command("notebook")

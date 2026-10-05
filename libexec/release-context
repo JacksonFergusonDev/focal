@@ -1,27 +1,37 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# DESC: Copies metadata and intent for PRs merged since the last release.
+# DESC: Copies Git release membership, PR intent, and net impact.
 
 SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 source "${SCRIPT_DIR}/../lib/core.sh"
 
 LEVEL="patch"
-BASE_REF=""
-HEAD_REF="HEAD"
+PROJECT_CONTEXT=false
+BACKEND_ARGS=()
+MAX_TOKENS=24000
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h | --help)
       print_subcommand_help "release-context" \
-        "Copies metadata, PR intent, and raw commit history since the last release tag." \
+        "Copies exact Git release membership, PR intent, changed paths, and release impact." \
         "[level] [options]" \
-        "level            The bump level to compare against: minor, major, or patch (default: patch)." \
-        "--minor, -m      Pull context since the last minor release." \
-        "--major          Pull context since the last major release." \
-        "--patch          Pull context since the last patch release (default)." \
-        "--base <ref>     The base Git tag, commit, or branch to start the context from (exclusive)." \
-        "--head <ref>     The target Git tag, commit, or branch to end the context at (inclusive). Defaults to HEAD."
+        "level                  minor, major, or patch (default: patch)." \
+        "--minor, -m            Since the previous reachable stable x.y.0 tag." \
+        "--major                Since the previous reachable stable x.0.0 tag." \
+        "--patch                Since the previous reachable stable SemVer tag (default)." \
+        "--base <ref>           Explicit exclusive base Git ref." \
+        "--head <ref>           Explicit inclusive target; overrides --version tag selection." \
+        "--version <tag>        Release version; targets the local tag if present, otherwise HEAD." \
+        "--previous-release <tag>  Select the GitHub release used as a style reference." \
+        "--bots <mode>          summary (default), include, or exclude." \
+        "--request-timeout <s>  Maximum seconds per GitHub request (default: 10)." \
+        "--github-timeout <s>   Total GitHub collection budget in seconds (default: 60)." \
+        "--max-tokens <n>       Approximate output budget (default: 24000; 0 disables)." \
+        "--diff                 Include the net diff between resolved endpoints." \
+        "--path <pathspec>      Focus the diff; repeatable, requires --diff." \
+        "--project-context      Append current checkout tree, status, and core manifests."
       exit 0
       ;;
     minor | --minor | -m)
@@ -37,97 +47,45 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --level | --since)
-      if [[ -z ${2:-} ]]; then
-        die "$1 requires an argument (major, minor, or patch)" "specify 'major', 'minor', or 'patch'" 1
-      fi
+      [[ -n ${2:-} ]] || die "$1 requires an argument (major, minor, or patch)" "specify a release level" 1
       case "$2" in
-        major | minor | patch)
-          LEVEL="$2"
-          ;;
-        *)
-          die "invalid release level '$2'. Expected 'major', 'minor', or 'patch'." "valid options: major, minor, patch" 1
-          ;;
+        major | minor | patch) LEVEL="$2" ;;
+        *) die "invalid release level '$2'. Expected 'major', 'minor', or 'patch'." "valid options: major, minor, patch" 1 ;;
       esac
       shift 2
       ;;
-    --base)
-      BASE_REF="$2"
+    --base | --head | --bots | --path | --version | --previous-release | --request-timeout | --github-timeout | --max-tokens)
+      if [[ -z ${2:-} || $2 == --* ]]; then
+        if [ "$1" = "--max-tokens" ]; then
+          die "--max-tokens requires an argument: a numeric token budget" "use '--max-tokens 0' for full output, or '--max-tokens 100000' for a larger approximate budget (default: 24000)" 1
+        fi
+        die "$1 requires an argument" "run 'focal release-context --help' for usage" 1
+      fi
+      if [ "$1" = "--max-tokens" ]; then MAX_TOKENS="$2"; fi
+      BACKEND_ARGS+=("$1" "$2")
       shift 2
       ;;
-    --head)
-      HEAD_REF="$2"
-      shift 2
+    --diff)
+      BACKEND_ARGS+=("--diff")
+      shift
       ;;
-    *)
-      die "unknown argument: $1" "run 'focal release-context --help' for usage" 1
+    --project-context)
+      PROJECT_CONTEXT=true
+      shift
       ;;
+    *) die "unknown argument: $1" "run 'focal release-context --help' for usage" 1 ;;
   esac
 done
 
 require_cmd "git"
-require_gh_auth
+require_cmd "gh"
 
-if [ -z "$BASE_REF" ]; then
-  MATCH_ARGS=()
-  case "$LEVEL" in
-    minor)
-      MATCH_ARGS=("--match=*.*.0*")
-      ;;
-    major)
-      MATCH_ARGS=("--match=*.0.0*")
-      ;;
-    patch)
-      MATCH_ARGS=()
-      ;;
-  esac
-
-  # 1. Resolve candidate tag reachable from HEAD_REF
-  LATEST_TAG=$(git describe --tags --abbrev=0 "${MATCH_ARGS[@]}" "$HEAD_REF" 2>/dev/null || echo "")
-
-  # If HEAD_REF points directly to the candidate tag commit, find the previous matching tag
-  if [ -n "$LATEST_TAG" ]; then
-    HEAD_COMMIT=$(git rev-parse "${HEAD_REF}^{commit}" 2>/dev/null || echo "")
-    TAG_COMMIT=$(git rev-parse "${LATEST_TAG}^{commit}" 2>/dev/null || echo "")
-    if [ -n "$HEAD_COMMIT" ] && [ "$HEAD_COMMIT" = "$TAG_COMMIT" ]; then
-      if git rev-parse --verify "${HEAD_REF}^" >/dev/null 2>&1; then
-        LATEST_TAG=$(git describe --tags --abbrev=0 "${MATCH_ARGS[@]}" "${HEAD_REF}^" 2>/dev/null || echo "")
-      else
-        LATEST_TAG=""
-      fi
-    fi
-  fi
-
-  if [ -z "$LATEST_TAG" ]; then
-    # Fallback: Find the chronological first commit of the repository
-    LATEST_TAG=$(git rev-list --max-parents=0 HEAD | tail -n 1)
-    TAG_DATE=$(git log -1 --format=%cI "$LATEST_TAG")
-    HEADER_REF="Initial Commit"
-  else
-    # Get the ISO 8601 commit date of the tag
-    TAG_DATE=$(git log -1 --format=%cI "$LATEST_TAG")
-    HEADER_REF="$LATEST_TAG"
-  fi
-else
-  # User provided base ref
-  LATEST_TAG="$BASE_REF"
-  if ! TAG_DATE=$(git log -1 --format=%cI "$LATEST_TAG" 2>/dev/null); then
-    die "invalid base ref '$BASE_REF'" "ensure the git ref exists in this repository" 1
-  fi
-  HEADER_REF="$LATEST_TAG"
+formatted=$("$PYTHON_EXEC" -m focal release-context --level "$LEVEL" "${BACKEND_ARGS[@]}") || exit 1
+if [ "$PROJECT_CONTEXT" = true ]; then
+  formatted+=$'\n# Project Background (current checkout, not the release snapshot)\n\n'
+  formatted+=$'Tree is limited to six levels; core files are limited to their first 500 lines.\n\n'
+  formatted+="$(generate_project_context)"
+  formatted=$(printf "%s" "$formatted" | "$PYTHON_EXEC" -c 'import sys; from focal.release_output import limit_release_output; print(limit_release_output(sys.stdin.read(), int(sys.argv[1])), end="")' "$MAX_TOKENS")
 fi
-
-if ! HEAD_DATE=$(git log -1 --format=%cI "$HEAD_REF" 2>/dev/null); then
-  die "invalid head ref '$HEAD_REF'" "ensure the git ref exists in this repository" 1
-fi
-
-# 2. Extract repository architecture context
-repo_context="$(generate_project_context)"
-
-# 3. Pass the parameters to the Python backend
-if ! formatted=$("$PYTHON_EXEC" -m focal release-context "$TAG_DATE" "$HEADER_REF" "$LATEST_TAG" "$HEAD_REF" "$HEAD_DATE"); then
-  exit 1
-fi
-
-# 4. Concatenate and copy to clipboard
-combined_payload="${repo_context}${formatted}"
-output_and_copy "$combined_payload" "Copied repository and release context from $HEADER_REF to $HEAD_REF"
+# The backend records immutable release endpoints; avoid unrelated checkout metadata.
+FOCAL_OMIT_WORKSPACE=1 output_and_copy "$formatted" "Copied release context"

@@ -55,12 +55,37 @@ def test_cli_release_context():
         mock_fn.return_value = "# Release Context"
         result = runner.invoke(
             cli,
-            ["release-context", "2026-01-01", "v1.0.0", "v0.9.0", "HEAD", "2026-02-01"],
+            [
+                "release-context",
+                "--base",
+                "v0.9.0",
+                "--head",
+                "v1.0.0",
+                "--bots",
+                "include",
+                "--diff",
+                "--path",
+                "src/",
+                "--version",
+                "v1.0.0",
+                "--previous-release",
+                "v0.9.0",
+            ],
         )
         assert result.exit_code == 0
         assert "# Release Context" in result.output
         mock_fn.assert_called_once_with(
-            "2026-01-01", "v1.0.0", "v0.9.0", head_ref="HEAD", head_date="2026-02-01"
+            "v0.9.0",
+            "v1.0.0",
+            "patch",
+            "include",
+            True,
+            ("src/",),
+            version="v1.0.0",
+            previous_release="v0.9.0",
+            request_timeout=10,
+            github_timeout=60,
+            max_tokens=24000,
         )
 
 
@@ -104,3 +129,17 @@ def test_cli_wip_context():
         assert result.exit_code == 0
         assert "# WIP Branch Context" in result.output
         mock_fn.assert_called_once_with("main")
+
+
+def test_cli_release_context_path_requires_diff():
+    result = CliRunner().invoke(cli, ["release-context", "--path", "src/"])
+    assert result.exit_code == 2
+    assert "--path requires --diff" in result.output
+
+
+def test_cli_version_keeps_implicit_head_distinct_from_explicit_head():
+    with patch("focal.cli.get_release_context", return_value="context") as collector:
+        result = CliRunner().invoke(cli, ["release-context", "--version", "v0.10.0"])
+    assert result.exit_code == 0
+    assert collector.call_args.args[1] is None
+    assert collector.call_args.kwargs["version"] == "v0.10.0"
