@@ -47,7 +47,7 @@ setup() {
 
     [ "$status" -eq 0 ]
     [[ "$output" == *"# Source: https://example.com"* ]]
-    [[ "$output" == *"Example Domain"* ]]
+    [[ "$output" == *"documentation examples"* ]]
 }
 
 @test "web normalizes bare domain to https" {
@@ -55,7 +55,7 @@ setup() {
 
     [ "$status" -eq 0 ]
     [[ "$output" == *"# Source: https://example.com"* ]]
-    [[ "$output" == *"Example Domain"* ]]
+    [[ "$output" == *"documentation examples"* ]]
 }
 
 @test "web rejects invalid URL scheme" {
