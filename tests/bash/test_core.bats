@@ -55,6 +55,7 @@ setup() {
 }
 
 @test "resolve_path_args handles files, directories with trailing slash, and deduplicates" {
+    orig_dir="$PWD"
     tmpdir=$(mktemp -d)
     mkdir -p "$tmpdir/pkg"
     touch "$tmpdir/pkg/mod1.py"
@@ -63,6 +64,7 @@ setup() {
 
     cd "$tmpdir"
     run resolve_path_args "pkg/" "root.txt" "pkg/mod1.py"
+    cd "$orig_dir"
     rm -rf "$tmpdir"
 
     [ "$status" -eq 0 ]
@@ -76,12 +78,14 @@ setup() {
 }
 
 @test "resolve_path_args errors if directory passed without trailing slash" {
+    orig_dir="$PWD"
     tmpdir=$(mktemp -d)
     mkdir -p "$tmpdir/pkg"
     touch "$tmpdir/pkg/mod1.py"
 
     cd "$tmpdir"
     run resolve_path_args "pkg"
+    cd "$orig_dir"
     rm -rf "$tmpdir"
 
     [ "$status" -eq 1 ]
@@ -162,6 +166,7 @@ setup() {
 }
 
 @test "get_existing_core_manifests discovers existing manifests" {
+    orig_dir="$PWD"
     tmpdir=$(mktemp -d)
     touch "$tmpdir/README.md"
     touch "$tmpdir/Cargo.toml"
@@ -169,6 +174,7 @@ setup() {
 
     cd "$tmpdir"
     run get_existing_core_manifests
+    cd "$orig_dir"
     rm -rf "$tmpdir"
 
     [ "$status" -eq 0 ]

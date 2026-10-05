@@ -2,6 +2,12 @@
 
 setup() {
     RELEASE_CONTEXT_BIN="${BATS_TEST_DIRNAME}/../../libexec/release-context"
+    ORIG_DIR="$PWD"
+}
+
+teardown() {
+    cd "$ORIG_DIR"
+    rm -rf "$BATS_TEST_TMPDIR/repo" "$BATS_TEST_TMPDIR/bin"
 }
 
 @test "release-context -h prints usage and options" {
@@ -31,11 +37,13 @@ setup() {
 }
 
 make_release_repo() {
+    rm -rf "$BATS_TEST_TMPDIR/repo" "$BATS_TEST_TMPDIR/bin"
     mkdir -p "$BATS_TEST_TMPDIR/repo" "$BATS_TEST_TMPDIR/bin"
     cat > "$BATS_TEST_TMPDIR/bin/gh" <<'MOCK'
 #!/usr/bin/env bash
 case "$1" in
-  repo) echo '{"nameWithOwner":"org/repo"}' ;;
+  repo) echo '{"nameWithOwner":"org/repo","url":"https://github.com/org/repo"}' ;;
+  release) echo '{"tagName":"v1.0.0","name":"v1.0.0","body":"Release notes","url":"https://github.com/org/repo/releases/tag/v1.0.0"}' ;;
   api) echo '[]' ;;
   *) exit 1 ;;
 esac

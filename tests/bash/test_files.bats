@@ -2,11 +2,13 @@
 
 setup() {
     FILES_BIN="${BATS_TEST_DIRNAME}/../../libexec/files"
+    ORIG_DIR="$PWD"
     TMP_DIR=$(mktemp -d)
     cd "$TMP_DIR"
 }
 
 teardown() {
+    cd "$ORIG_DIR"
     rm -rf "$TMP_DIR"
 }
 

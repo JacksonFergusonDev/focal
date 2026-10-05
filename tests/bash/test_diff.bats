@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 
 setup() {
+    ORIG_DIR="$PWD"
     DIFF_BIN="${BATS_TEST_DIRNAME}/../../libexec/diff"
     TMP_REPO=$(mktemp -d)
     cd "$TMP_REPO"
@@ -10,6 +11,7 @@ setup() {
 }
 
 teardown() {
+    cd "$ORIG_DIR"
     rm -rf "$TMP_REPO"
 }
 

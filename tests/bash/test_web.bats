@@ -76,10 +76,10 @@ setup() {
 }
 
 @test "web surfaces anti-bot hint on HTTP 999" {
-    run "$WEB_BIN" https://www.linkedin.com/in/jackson--ferguson/
+    run "$WEB_BIN" https://httpbin.org/status/999
 
     [ "$status" -eq 1 ]
-    [[ "$output" == *"error: HTTP 999 returned by www.linkedin.com"* ]]
+    [[ "$output" == *"error: HTTP 999 returned by httpbin.org"* ]]
     [[ "$output" == *"hint: this site blocks automated CLI scrapers. Open the page in your browser and run: pbpaste | focal web"* ]]
 }
 

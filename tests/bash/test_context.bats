@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 
 setup() {
+    ORIG_DIR="$PWD"
     CONTEXT_BIN="${BATS_TEST_DIRNAME}/../../libexec/context"
     TMP_DIR=$(mktemp -d)
     cd "$TMP_DIR"
@@ -10,6 +11,7 @@ setup() {
 }
 
 teardown() {
+    cd "$ORIG_DIR"
     rm -rf "$TMP_DIR"
 }
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 
 setup() {
+    ORIG_DIR="$PWD"
     SEARCH_BIN="${BATS_TEST_DIRNAME}/../../libexec/search"
     SYMBOL_BIN="${BATS_TEST_DIRNAME}/../../libexec/symbol"
     API_BIN="${BATS_TEST_DIRNAME}/../../libexec/api"
@@ -10,6 +11,7 @@ setup() {
 }
 
 teardown() {
+    cd "$ORIG_DIR"
     rm -rf "$TMP_DIR"
 }
 
