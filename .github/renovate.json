@@ -9,7 +9,7 @@
         "before 4am on monday"
     ],
     "internalChecksFilter": "strict",
-    "rebaseWhen": "conflicted",
+    "rebaseWhen": "behind-base-branch",
     "labels": [
         "dependencies",
         "chore"
