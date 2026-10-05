@@ -80,7 +80,7 @@ done
 require_cmd "git"
 require_cmd "gh"
 
-formatted=$("$PYTHON_EXEC" -m focal release-context --level "$LEVEL" "${BACKEND_ARGS[@]}") || exit 1
+formatted=$("$PYTHON_EXEC" -m focal release-context --level "$LEVEL" ${BACKEND_ARGS[@]+"${BACKEND_ARGS[@]}"}) || exit 1
 if [ "$PROJECT_CONTEXT" = true ]; then
   formatted+=$'\n# Project Background (current checkout, not the release snapshot)\n\n'
   formatted+=$'Tree is limited to six levels; core files are limited to their first 500 lines.\n\n'
