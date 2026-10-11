@@ -316,7 +316,7 @@ output_and_copy() {
     payload+="PWD: $(pwd)"$'\n'
     if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
       payload+="Git Branch: $(git branch --show-current)"$'\n'
-      payload+="Git Commit: $(git rev-parse --short HEAD)"$'\n'
+      payload+="Git Commit: $(git rev-parse --short HEAD 2>/dev/null || echo "none")"$'\n'
     fi
     payload+=$'\n---\n\n'
   fi
@@ -532,6 +532,22 @@ _print_context_file() {
   echo
 }
 
+generate_git_info() {
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    return 0
+  fi
+
+  echo "# Git Info"
+  echo '```text'
+  echo "Branch: $(git branch --show-current)"
+  echo "Commit: $(git rev-parse --short HEAD 2>/dev/null || echo "none")"
+  echo
+  echo "Modified files:"
+  git status --porcelain
+  echo '```'
+  echo
+}
+
 generate_project_context() {
   echo "# Repository Tree"
   echo '```text'
@@ -539,17 +555,7 @@ generate_project_context() {
   echo '```'
   echo
 
-  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    echo "# Git Info"
-    echo '```text'
-    echo "Branch: $(git branch --show-current)"
-    echo "Commit: $(git rev-parse --short HEAD)"
-    echo
-    echo "Modified files:"
-    git status --porcelain
-    echo '```'
-    echo
-  fi
+  generate_git_info
 
   while IFS= read -r f; do
     if [ -n "$f" ]; then
