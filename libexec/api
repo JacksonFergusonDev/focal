@@ -14,7 +14,7 @@ fi
 
 require_cmd "rg" "install ripgrep (e.g. 'brew install ripgrep')"
 
-matches=$(rg '^(class|def) ' . || true)
+matches=$(rg --type py '^(class|(async )?def) ' . || true)
 
 if [ -z "$matches" ]; then
   status_info "No Python classes or functions found."

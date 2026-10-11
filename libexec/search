@@ -8,8 +8,13 @@ source "${SCRIPT_DIR}/../lib/core.sh"
 if [[ $# -gt 0 ]] && [[ $1 =~ ^(-h|--help)$ ]]; then
   print_subcommand_help "search" \
     "Searches the codebase for a regex pattern and copies matching contexts to the clipboard." \
-    "<pattern>"
+    "[--] <pattern>"
   exit 0
+fi
+
+# Allow 'focal search -- <pattern>' for patterns that would otherwise look like help flags
+if [ "${1:-}" = "--" ]; then
+  shift
 fi
 
 require_cmd "rg" "install ripgrep (e.g. 'brew install ripgrep')"
@@ -18,7 +23,8 @@ if [ $# -eq 0 ]; then
   die "missing search pattern" "usage: focal search <pattern>" 1
 fi
 
-matches=$(rg --context 5 "$1" . || true)
+# -e keeps patterns that start with '-' from being parsed as ripgrep options
+matches=$(rg --context 5 -e "$1" . || true)
 
 if [ -z "$matches" ]; then
   status_info "No matches found for '$1'."
