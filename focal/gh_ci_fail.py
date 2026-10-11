@@ -2,7 +2,6 @@
 
 import re
 
-from focal.errors import die
 from focal.utils import fenced, run_gh, run_gh_json
 
 ERROR_PATTERNS = [
@@ -42,7 +41,11 @@ def filter_logs(raw_logs: str) -> str:
 
     # Regex to match the GitHub Actions prefix:
     # e.g., 'Job Name\tStep Name\t2026-08-10T19:09:40.6560982Z '
-    prefix_pattern = re.compile(r"^.*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\s?")
+    # Only the leading job/step fields are consumed, so timestamps inside the log
+    # message itself are preserved.
+    prefix_pattern = re.compile(
+        r"^(?:[^\t\n]*\t){0,2}\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\s?"
+    )
 
     # Regex to match ANSI escape codes
     ansi_escape = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
@@ -133,12 +136,10 @@ def get_ci_failure_context(run_id: str) -> str:
     Raises:
         SystemExit: If fetching logs fails.
     """
-    code, stdout = run_gh(["run", "view", run_id, "--log-failed"], exit_on_error=False)
-    if code != 0:
-        die(
-            f"error fetching logs: {stdout}",
-            hint="verify that the run ID exists and you have access",
-        )
+    _, stdout = run_gh(
+        ["run", "view", run_id, "--log-failed"],
+        hint="verify that the run ID exists and you have access",
+    )
 
     meta = run_gh_json(
         ["run", "view", run_id, "--json", "name,displayTitle"], exit_on_error=False

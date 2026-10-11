@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -16,7 +16,8 @@ def test_get_ci_failure_context_success():
         result = get_ci_failure_context("123")
 
         mock_run_gh.assert_called_once_with(
-            ["run", "view", "123", "--log-failed"], exit_on_error=False
+            ["run", "view", "123", "--log-failed"],
+            hint="verify that the run ID exists and you have access",
         )
         mock_run_gh_json.assert_called_once_with(
             ["run", "view", "123", "--json", "name,displayTitle"], exit_on_error=False
@@ -28,14 +29,20 @@ def test_get_ci_failure_context_success():
         )
 
 
-def test_get_ci_failure_context_log_failure():
-    with patch("focal.gh_ci_fail.run_gh") as mock_run_gh:
-        mock_run_gh.return_value = (1, "api error")
+def test_get_ci_failure_context_log_failure_reports_gh_stderr():
+    with patch("focal.utils.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(
+            returncode=1,
+            stdout="",
+            stderr="could not find any workflow run with ID 123",
+        )
 
         with pytest.raises(SystemExit) as exc_info:
             get_ci_failure_context("123")
 
-        assert "error fetching logs: api error" in str(exc_info.value)
+        message = str(exc_info.value)
+        assert "could not find any workflow run with ID 123" in message
+        assert "verify that the run ID exists" in message
 
 
 def test_gh_ci_fail_filter_logs():
@@ -103,3 +110,15 @@ def test_gh_ci_fail_filter_logs():
     )
     expected = "##[group]Run tests\nFAILED tests/test_core.py::test_fn - AssertionError\n##[endgroup]"
     assert filter_logs(raw_logs) == expected
+
+
+def test_filter_logs_preserves_timestamps_inside_log_messages():
+    from focal.gh_ci_fail import filter_logs
+
+    raw_logs = (
+        "build\tRun tests\t2026-08-10T19:09:40.1Z "
+        "FAILED test_x - expected 2026-01-01T00:00:00Z got None"
+    )
+    assert filter_logs(raw_logs) == (
+        "FAILED test_x - expected 2026-01-01T00:00:00Z got None"
+    )
