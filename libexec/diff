@@ -138,7 +138,7 @@ else
 fi
 
 if [ -z "$diff_output" ]; then
-  echo "No changes detected in $target_name."
+  status_info "No changes detected in $target_name."
   exit 0
 fi
 

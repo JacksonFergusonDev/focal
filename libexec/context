@@ -60,7 +60,6 @@ additional_files=""
 
 if [ "$mode" == "interactive" ]; then
   require_cmd "fzf"
-  require_cmd "bat"
 
   header="TAB: multi-select | CTRL-A: select all"
 
