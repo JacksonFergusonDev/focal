@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from focal.utils import run_gh, run_gh_json, run_git
+from focal.utils import fenced, md_fence, run_gh, run_gh_json, run_git
 
 
 def test_run_gh_json_success():
@@ -184,3 +184,18 @@ def test_resolve_base_branch_fallbacks():
         # symbolic-ref fails, main fails, origin/main fails, master succeeds
         mock_run_git.side_effect = [(1, ""), (1, ""), (1, ""), (0, "")]
         assert resolve_base_branch(None) == "master"
+
+
+def test_md_fence_defaults_to_three_backticks():
+    assert md_fence("plain text") == "```"
+    assert md_fence("inline `code` and ``double``") == "```"
+
+
+def test_md_fence_outgrows_nested_fences():
+    assert md_fence("```bash\necho hi\n```") == "````"
+    assert md_fence("`````\nnested\n`````") == "``````"
+
+
+def test_fenced_wraps_content_that_contains_fences():
+    content = "# Readme\n\n```bash\necho hi\n```\n"
+    assert fenced(content, "markdown") == f"````markdown\n{content}\n````"

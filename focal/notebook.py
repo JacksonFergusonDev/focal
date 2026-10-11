@@ -4,6 +4,8 @@ import json
 import re
 from typing import Any
 
+from focal.utils import fenced
+
 MAX_OUTPUT_CHARS = 4000
 
 
@@ -79,7 +81,7 @@ def render_output(out: Any, max_chars: int | None = None) -> str | None:
         name = out.get("name", "stdout")
         text = truncate(strip_ansi(join_text(out.get("text", ""))), max_chars=max_chars)
         if text.strip():
-            return f"```text\n[{name}]\n{text.rstrip()}\n```"
+            return fenced(f"[{name}]\n{text.rstrip()}", "text")
 
     if ot == "error":
         ename = strip_ansi(str(out.get("ename", "")))
@@ -99,7 +101,7 @@ def render_output(out: Any, max_chars: int | None = None) -> str | None:
         body = truncate(body, max_chars=max_chars)
 
         if body.strip():
-            return f"```text\n[error]\n{body.rstrip()}\n```"
+            return fenced(f"[error]\n{body.rstrip()}", "text")
 
     if ot in {"display_data", "execute_result"}:
         data = out.get("data")
@@ -112,19 +114,19 @@ def render_output(out: Any, max_chars: int | None = None) -> str | None:
         if "text/plain" in data:
             text = truncate(join_text(data.get("text/plain", "")), max_chars=max_chars)
             if text.strip():
-                return f"```text\n{text.rstrip()}\n```"
+                return fenced(text.rstrip(), "text")
 
         if "text/html" in data:
             raw_html = join_text(data.get("text/html", ""))
             stripped = re.sub(r"<[^>]+>", "", raw_html)
             text = truncate(stripped, max_chars=max_chars)
             if text.strip():
-                return f"```text\n{text.rstrip()}\n```"
+                return fenced(text.rstrip(), "text")
 
         if "text/latex" in data:
             text = truncate(join_text(data.get("text/latex", "")), max_chars=max_chars)
             if text.strip():
-                return f"```latex\n{text.rstrip()}\n```"
+                return fenced(text.rstrip(), "latex")
 
         if "application/json" in data:
             json_payload = data.get("application/json")
@@ -135,7 +137,7 @@ def render_output(out: Any, max_chars: int | None = None) -> str | None:
                     formatted_json = str(json_payload)
                 text = truncate(formatted_json, max_chars=max_chars)
                 if text.strip():
-                    return f"```json\n{text.rstrip()}\n```"
+                    return fenced(text.rstrip(), "json")
             except Exception:
                 pass
 
@@ -262,13 +264,7 @@ def notebook_to_llm_text(path: str, max_output_chars: int = MAX_OUTPUT_CHARS) ->
             src = join_text(cell.get("source")).rstrip()
 
             if src:
-                block = [
-                    f"\n## Markdown cell {i}",
-                    "",
-                    "```markdown",
-                    src,
-                    "```",
-                ]
+                block = [f"\n## Markdown cell {i}", "", fenced(src, "markdown")]
                 parts.append("\n".join(block))
 
         elif ctype == "code":
@@ -283,13 +279,7 @@ def notebook_to_llm_text(path: str, max_output_chars: int = MAX_OUTPUT_CHARS) ->
                 else "[not executed]"
             )
 
-            block = [
-                f"\n## Code cell {i} {exec_str}",
-                "",
-                f"```{lang}",
-                src,
-                "```",
-            ]
+            block = [f"\n## Code cell {i} {exec_str}", "", fenced(src, lang)]
 
             for out in cell.get("outputs", []):
                 rendered = render_output(out, max_chars=max_output_chars)
@@ -315,13 +305,7 @@ def notebook_to_llm_text(path: str, max_output_chars: int = MAX_OUTPUT_CHARS) ->
                 else "text"
             )
 
-            block = [
-                f"\n## Raw cell {i}",
-                "",
-                f"```{raw_format}",
-                src,
-                "```",
-            ]
+            block = [f"\n## Raw cell {i}", "", fenced(src, raw_format)]
             parts.append("\n".join(block))
 
     return "\n".join(parts).strip() + "\n"

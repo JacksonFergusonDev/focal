@@ -81,3 +81,13 @@ teardown() {
     [ "$status" -eq 1 ]
     [[ "$output" == *"error: 'src' is a directory; append a trailing slash (e.g. 'src/') to select its contents"* ]]
 }
+
+@test "files wraps content containing code fences in a longer fence" {
+    printf '# Doc\n\n```bash\necho hi\n```\n' > doc.md
+
+    run "$FILES_BIN" doc.md
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *$'# doc.md\n````md\n# Doc'* ]]
+    [[ "$output" == *$'```\n````'* ]]
+}

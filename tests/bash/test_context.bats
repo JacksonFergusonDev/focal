@@ -118,3 +118,14 @@ teardown() {
     [[ "$output" == *"Commit: none"* ]]
     [[ "$output" == *"# README.md"* ]]
 }
+
+@test "context fences core manifests that contain code fences" {
+    printf '# Readme\n\n```bash\necho hi\n```\n' > README.md
+    git add .
+    git commit -qm "init"
+
+    run "$CONTEXT_BIN" -c
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *$'# README.md\n````md\n# Readme'* ]]
+}

@@ -1,7 +1,7 @@
 """Fetches and formats GitHub Pull Request descriptions and diffs into markdown."""
 
 from focal.errors import die
-from focal.utils import run_gh, run_gh_json
+from focal.utils import fenced, run_gh, run_gh_json
 
 
 def get_pr_diff_context(pr_id: str) -> str:
@@ -32,6 +32,6 @@ def get_pr_diff_context(pr_id: str) -> str:
     parts.append(data.get("body") or "*No description provided.*")
 
     parts.append("\n## Diff")
-    parts.append(f"```diff\n{diff_out.strip()}\n```")
+    parts.append(fenced(diff_out.strip(), "diff"))
 
     return "\n".join(parts)

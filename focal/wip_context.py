@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 
 from focal.errors import die
-from focal.utils import resolve_base_branch, run_git
+from focal.utils import fenced, resolve_base_branch, run_git
 
 # Conservative character limit for the diff section (~8k tokens) to maintain high LLM attention
 MAX_DIFF_CHARS = 30000
@@ -98,15 +98,16 @@ def get_diff_for_files(
         ]
         cleaned_diff = "\n".join(cleaned_lines)
 
-        block = f"### `{file}`\n```diff\n{cleaned_diff}\n```"
+        header = f"### `{file}`\n"
+        block = header + fenced(cleaned_diff, "diff")
 
         if len(block) > chars_remaining:
-            # Truncate the block to fit the remaining budget, ensuring we close the markdown fence.
-            # We allocate a ~60 char buffer for the truncation warning and closing ticks.
+            # Truncate the diff to fit the remaining budget, then re-fence it so the block stays closed.
+            # We allocate a ~60 char buffer for the truncation warning and fences.
             if chars_remaining > 100:
-                sliced_diff = block[: chars_remaining - 60]
-                sliced_diff += "\n...[diff truncated: context limit reached]\n```"
-                diff_blocks.append(sliced_diff)
+                sliced_diff = cleaned_diff[: max(0, chars_remaining - len(header) - 60)]
+                sliced_diff += "\n...[diff truncated: context limit reached]"
+                diff_blocks.append(header + fenced(sliced_diff, "diff"))
 
             omitted_count += 1
             chars_remaining = (
@@ -201,18 +202,14 @@ def get_wip_context(target_branch: str | None = None) -> str:
     ]
 
     if status:
-        parts.extend(["\n## 0. Uncommitted Changes", "```text", status, "```"])
+        parts.extend(["\n## 0. Uncommitted Changes", fenced(status, "text")])
 
     parts.extend(
         [
             "\n## 1. Branch Topology",
-            "```text",
-            topology,
-            "```",
+            fenced(topology, "text"),
             "\n## 2. Macroscopic Map",
-            "```text",
-            diff_stat,
-            "```",
+            fenced(diff_stat, "text"),
             "\n## 3. Microscopic Diffs",
         ]
     )

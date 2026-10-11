@@ -387,6 +387,17 @@ get_file_metadata() {
   printf "Size: %s\nMetadata: %s" "$size" "$meta"
 }
 
+# Print a backtick fence long enough to wrap content that contains its own fences
+md_fence() {
+  local longest
+  longest=$(printf '%s' "$1" | grep -oE '`+' | awk '{ if (length($0) > m) m = length($0) } END { print m + 0 }')
+  local len=3
+  if [ "$longest" -ge 3 ]; then
+    len=$((longest + 1))
+  fi
+  printf '%*s' "$len" '' | tr ' ' '`'
+}
+
 format_file_for_llm() {
   local file="$1"
   local ext="${file##*.}"
@@ -440,7 +451,9 @@ format_file_for_llm() {
   if [[ $ext_lower == "ipynb" ]] || [[ $ext_lower == "pdf" ]]; then
     printf "%s\n\n" "$content"
   else
-    printf "# %s\n\`\`\`%s\n%s\n\`\`\`\n\n" "$file" "$ext" "$content"
+    local fence
+    fence=$(md_fence "$content")
+    printf "# %s\n%s%s\n%s\n%s\n\n" "$file" "$fence" "$ext" "$content" "$fence"
   fi
 
   # Transmit status out-of-band
@@ -525,10 +538,14 @@ _print_context_file() {
     return
   fi
 
+  local content fence
+  content=$(head -n "$max_lines" "$file")
+  fence=$(md_fence "$content")
+
   echo "# $file"
-  echo "\`\`\`$lang"
-  head -n "$max_lines" "$file"
-  echo '```'
+  echo "${fence}${lang}"
+  printf '%s\n' "$content"
+  echo "$fence"
   echo
 }
 

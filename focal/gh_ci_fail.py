@@ -3,7 +3,7 @@
 import re
 
 from focal.errors import die
-from focal.utils import run_gh, run_gh_json
+from focal.utils import fenced, run_gh, run_gh_json
 
 ERROR_PATTERNS = [
     "##[error]",
@@ -149,4 +149,5 @@ def get_ci_failure_context(run_id: str) -> str:
         title = f"{meta.get('name') or 'CI'} - {meta.get('displayTitle') or ''}"
 
     filtered_logs = filter_logs(stdout)
-    return f"# CI Failure Context: {title}\n\n```text\n[error logs]\n{filtered_logs.strip()}\n```"
+    logs = fenced(f"[error logs]\n{filtered_logs.strip()}", "text")
+    return f"# CI Failure Context: {title}\n\n{logs}"

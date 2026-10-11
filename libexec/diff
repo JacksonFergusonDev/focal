@@ -164,10 +164,11 @@ ${stat_output}
 fi
 
 if [ -n "$diff_output" ]; then
+  diff_fence=$(md_fence "$diff_output")
   buffer+="### Diff
-\`\`\`diff
+${diff_fence}diff
 ${diff_output}
-\`\`\`
+${diff_fence}
 
 "
 fi

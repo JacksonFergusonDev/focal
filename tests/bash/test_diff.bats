@@ -118,3 +118,16 @@ teardown() {
     [[ "$output" == *"file with spaces.txt"* ]]
     [[ "$output" == *"untracked content"* ]]
 }
+
+@test "diff output outgrows fences in markdown context lines" {
+    # Unified-diff context lines carry a one-space prefix, which still closes a CommonMark fence
+    printf '# Doc\n```\ncode\n```\n' > doc.md
+    git add doc.md
+    git commit -qm "init"
+    printf '# Doc\n```\ncode\n```\nmore\n' > doc.md
+
+    run "$DIFF_BIN"
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *$'### Diff\n````diff\n'* ]]
+}
