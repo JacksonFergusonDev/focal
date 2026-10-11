@@ -648,10 +648,13 @@ cleanup_stale_cached_repos() {
     [ -d "$repo_dir" ] || continue
     local marker="${repo_dir}/.git/.focal_accessed"
 
-    # If it lacks the access marker (legacy/untracked), prune it
+    # If it lacks the access marker (legacy/untracked), prune it once it is older
+    # than the TTL; a fresh directory without a marker may be a clone in progress
     if [ ! -f "$marker" ]; then
-      status_info "Pruning legacy cached repository: $(basename "$repo_dir")"
-      rm -rf "$repo_dir"
+      if [ -n "$(find "$repo_dir" -maxdepth 0 -mtime +"$ttl_days" 2>/dev/null)" ]; then
+        status_info "Pruning legacy cached repository: $(basename "$repo_dir")"
+        rm -rf "$repo_dir"
+      fi
       continue
     fi
 

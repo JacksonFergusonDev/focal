@@ -60,7 +60,7 @@ fi
 
 # Find untracked files
 if [ $# -gt 0 ]; then
-  untracked_files=$(git ls-files --others --exclude-standard ${@+"$@"})
+  untracked_files=$(git ls-files --others --exclude-standard -- ${@+"$@"})
 else
   untracked_files=$(git ls-files --others --exclude-standard -- "${GIT_DIFF_NOISE_EXCLUDES[@]}")
 fi
@@ -74,7 +74,7 @@ stat_output=""
 
 if [ "$mode" == "staged" ]; then
   if [ $# -gt 0 ]; then
-    if ! git diff --quiet ${@+"$@"} 2>/dev/null; then
+    if ! git diff --quiet -- ${@+"$@"} 2>/dev/null; then
       status_warn "You have unstaged changes not included in this diff. Use --all to include everything."
     fi
   else
@@ -91,7 +91,7 @@ if [ "$mode" == "staged" ]; then
 
 elif [ "$mode" == "unstaged" ]; then
   if [ $# -gt 0 ]; then
-    if ! git diff --staged --quiet ${@+"$@"} 2>/dev/null; then
+    if ! git diff --staged --quiet -- ${@+"$@"} 2>/dev/null; then
       status_warn "You have staged changes not included in this diff. Use --staged or --all."
     fi
   else
@@ -132,7 +132,7 @@ fi
 
 # Get overall status
 if [ $# -gt 0 ]; then
-  status_output=$(git status --short ${@+"$@"})
+  status_output=$(git status --short -- ${@+"$@"})
 else
   status_output=$(git status --short -- "${GIT_DIFF_NOISE_EXCLUDES[@]}")
 fi
