@@ -165,7 +165,7 @@ def test_resolve_base_branch_with_slashes():
     from focal.utils import resolve_base_branch
 
     with patch("focal.utils.run_git") as mock_run_git:
-        mock_run_git.side_effect = [(0, "refs/remotes/origin/release/v1.0\n")]
+        mock_run_git.side_effect = [(0, "refs/remotes/origin/release/v1.0\n"), (0, "")]
         assert resolve_base_branch(None) == "release/v1.0"
 
 
@@ -199,3 +199,20 @@ def test_md_fence_outgrows_nested_fences():
 def test_fenced_wraps_content_that_contains_fences():
     content = "# Readme\n\n```bash\necho hi\n```\n"
     assert fenced(content, "markdown") == f"````markdown\n{content}\n````"
+
+
+def test_resolve_base_branch_uses_remote_ref_when_local_branch_missing():
+    from focal.utils import resolve_base_branch
+
+    with patch("focal.utils.run_git") as mock_run_git:
+        # symbolic-ref finds main; local main is missing; origin/main exists
+        mock_run_git.side_effect = [(0, "refs/remotes/origin/main"), (1, ""), (0, "")]
+        assert resolve_base_branch(None) == "origin/main"
+
+
+def test_resolve_base_branch_explicit_remote_only():
+    from focal.utils import resolve_base_branch
+
+    with patch("focal.utils.run_git") as mock_run_git:
+        mock_run_git.side_effect = [(1, ""), (0, "")]
+        assert resolve_base_branch("develop") == "origin/develop"

@@ -17,7 +17,7 @@ def _load_noise_config() -> tuple[set[str], set[str]]:
     if noise_path.is_file():
         try:
             data = json.loads(noise_path.read_text(encoding="utf-8"))
-            exts = {f".{ext.lstrip('.')}" for ext in data.get("extensions", [])}
+            exts = {f".{ext.lstrip('.').lower()}" for ext in data.get("extensions", [])}
             files = set(data.get("files", []))
             return exts, files
         except Exception:
@@ -54,10 +54,12 @@ def is_noise(filepath: str) -> bool:
     Returns:
         True if the file matches known noise patterns, False otherwise.
     """
-    path = Path(filepath)
-    if path.name in NOISE_FILES:
+    name = Path(filepath).name
+    if name in NOISE_FILES:
         return True
-    return any(path.name.endswith(ext) for ext in NOISE_EXTENSIONS)
+    # Extensions match case-insensitively, mirroring is_noise_file in lib/core.sh
+    lowered = name.lower()
+    return any(lowered.endswith(ext) for ext in NOISE_EXTENSIONS)
 
 
 def get_diff_for_files(

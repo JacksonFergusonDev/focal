@@ -161,28 +161,45 @@ def run_git(args: list[str], check: bool = True) -> tuple[int, str]:
     return res.returncode, res.stdout.strip()
 
 
+def _resolve_branch_ref(branch: str) -> str | None:
+    """Finds a usable ref for a branch, preferring the local branch over origin's.
+
+    Args:
+        branch: The branch name to look up.
+
+    Returns:
+        The local branch name, its `origin/` remote-tracking ref, or None if neither exists.
+    """
+    for ref in (branch, f"origin/{branch}"):
+        code, _ = run_git(
+            ["rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"], check=False
+        )
+        if code == 0:
+            return ref
+    return None
+
+
 def resolve_base_branch(target: str | None = None) -> str:
-    """Determines the target base branch to compare against.
+    """Determines the target base ref to compare against.
 
     If no target is provided, queries the remote default branch or sequentially
-    verifies the existence of 'main', 'master', and 'develop'.
+    verifies the existence of 'main', 'master', and 'develop'. A branch that only
+    exists on the remote (e.g. after `git clone -b feature`) resolves to its
+    `origin/` ref so that it can be passed directly to Git.
 
     Args:
         target: A user-specified branch name, or None.
 
     Returns:
-        The resolved branch name.
+        A ref that Git can resolve: the local branch or its `origin/` counterpart.
 
     Raises:
         SystemExit: If no branch is provided and standard defaults are not found.
     """
     if target:
-        code, _ = run_git(["rev-parse", "--verify", target], check=False)
-        if code == 0:
-            return target
-        code, _ = run_git(["rev-parse", "--verify", f"origin/{target}"], check=False)
-        if code == 0:
-            return target
+        ref = _resolve_branch_ref(target)
+        if ref:
+            return ref
         die(
             f"specified base branch '{target}' does not exist",
             hint="verify the branch name with 'git branch -a'",
@@ -190,21 +207,21 @@ def resolve_base_branch(target: str | None = None) -> str:
 
     # Dynamically query the default branch of the remote
     code, out = run_git(["symbolic-ref", "refs/remotes/origin/HEAD"], check=False)
-    if code == 0:
-        cleaned = out.strip()
-        if cleaned:
-            if cleaned.startswith("refs/remotes/origin/"):
-                return cleaned.removeprefix("refs/remotes/origin/")
-            return cleaned.split("/")[-1]
+    cleaned = out.strip()
+    if code == 0 and cleaned:
+        if cleaned.startswith("refs/remotes/origin/"):
+            default_branch = cleaned.removeprefix("refs/remotes/origin/")
+        else:
+            default_branch = cleaned.split("/")[-1]
+        ref = _resolve_branch_ref(default_branch)
+        if ref:
+            return ref
 
     fallbacks = ["main", "master", "develop"]
     for branch in fallbacks:
-        code, _ = run_git(["rev-parse", "--verify", branch], check=False)
-        if code == 0:
-            return branch
-        code, _ = run_git(["rev-parse", "--verify", f"origin/{branch}"], check=False)
-        if code == 0:
-            return branch
+        ref = _resolve_branch_ref(branch)
+        if ref:
+            return ref
 
     die(
         "could not automatically detect a base branch (tried main, master, develop)",
