@@ -91,3 +91,26 @@ teardown() {
     [[ "$output" == *$'# doc.md\n````md\n# Doc'* ]]
     [[ "$output" == *$'```\n````'* ]]
 }
+
+@test "files leaves the fence language empty for extensionless files" {
+    mkdir -p bin src.d
+    echo "echo tool" > bin/tool
+    echo "x" > src.d/noext
+
+    run "$FILES_BIN" bin/tool src.d/noext
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *$'# bin/tool\n```\necho tool'* ]]
+    [[ "$output" == *$'# src.d/noext\n```\nx'* ]]
+}
+
+@test "files truncates single-line files that exceed the byte limit" {
+    head -c 150000 /dev/zero | tr '\0' 'a' > bundle.js
+
+    run "$FILES_BIN" bundle.js
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"[file truncated: showing first 100000 of 150000 bytes]"* ]]
+    [[ "$output" == *"Truncated (size limit): 1 files"* ]]
+    [ "${#output}" -lt 110000 ]
+}

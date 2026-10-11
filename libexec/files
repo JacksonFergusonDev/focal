@@ -133,7 +133,7 @@ if [ "$skipped_count" -gt 0 ] || [ "$truncated_count" -gt 0 ] || [ "$empty_count
   echo "--- Extraction Summary ---" >&2
   echo "Added fully: $added_count files" >&2
   [ "$empty_count" -gt 0 ] && echo "Added empty: $empty_count files" >&2
-  [ "$truncated_count" -gt 0 ] && echo "Truncated (>1500 lines): $truncated_count files" >&2
+  [ "$truncated_count" -gt 0 ] && echo "Truncated (size limit): $truncated_count files" >&2
   [ "$skipped_count" -gt 0 ] && echo "Skipped (noise/binary): $skipped_count files" >&2
 fi
 
