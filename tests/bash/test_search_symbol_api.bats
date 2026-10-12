@@ -19,7 +19,7 @@ teardown() {
     run "$SEARCH_BIN" -h
 
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Usage: focal search <pattern>"* ]]
+    [[ "$output" == *"Usage: focal search [--] <pattern>"* ]]
 }
 
 @test "search without pattern errors with usage hint" {
@@ -51,7 +51,7 @@ teardown() {
     run "$SYMBOL_BIN" -h
 
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Usage: focal symbol <symbol>"* ]]
+    [[ "$output" == *"Usage: focal symbol [--] <symbol>"* ]]
 }
 
 @test "symbol without symbol errors with usage hint" {
@@ -133,4 +133,42 @@ EOF_PY
     [ "$status" -eq 0 ]
     [[ "$output" == *"sub"* ]]
     [[ "$output" == *"file.txt"* ]]
+}
+
+@test "search treats patterns starting with a dash as patterns, not options" {
+    echo "value = x --verbose" > app.py
+
+    run "$SEARCH_BIN" --verbose
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"value = x --verbose"* ]]
+}
+
+@test "search accepts -- before a pattern that looks like a help flag" {
+    echo "usage: tool -h" > notes.txt
+
+    run "$SEARCH_BIN" -- -h
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"usage: tool -h"* ]]
+}
+
+@test "symbol treats symbols starting with a dash as patterns" {
+    echo "flag = '--dry-run'" > cli.py
+
+    run "$SYMBOL_BIN" --dry-run
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"# ./cli.py"* ]]
+}
+
+@test "api includes async functions and ignores non-Python files" {
+    printf 'async def fetch():\n    pass\n' > client.py
+    printf 'def not_python\n' > notes.md
+
+    run "$API_BIN"
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"async def fetch():"* ]]
+    [[ "$output" != *"notes.md"* ]]
 }

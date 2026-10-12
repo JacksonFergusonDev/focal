@@ -9,8 +9,13 @@ source "${SCRIPT_DIR}/../lib/core.sh"
 if [[ $# -gt 0 ]] && [[ $1 =~ ^(-h|--help)$ ]]; then
   print_subcommand_help "symbol" \
     "Locates files containing a specific symbol and copies full contents to the clipboard." \
-    "<symbol>"
+    "[--] <symbol>"
   exit 0
+fi
+
+# Allow 'focal symbol -- <pattern>' for patterns that would otherwise look like help flags
+if [ "${1:-}" = "--" ]; then
+  shift
 fi
 
 require_cmd "rg" "install ripgrep (e.g. 'brew install ripgrep')"
@@ -19,7 +24,8 @@ if [ $# -eq 0 ]; then
   die "missing symbol name" "usage: focal symbol <symbol>" 1
 fi
 
-matching_files=$(rg -l "$1" . || true)
+# -e keeps symbols that start with '-' from being parsed as ripgrep options
+matching_files=$(rg -l -e "$1" . || true)
 
 if [ -z "$matching_files" ]; then
   status_info "No files found containing symbol '$1'."
