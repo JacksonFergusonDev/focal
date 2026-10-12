@@ -106,12 +106,9 @@ fi
 buffer="# Repository Tree"$'\n```text\n'
 buffer+="$(generate_repo_tree)"$'\n```\n\n'
 
-if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  buffer+="# Git Info"$'\n```text\n'
-  buffer+="Branch: $(git branch --show-current)"$'\n'
-  buffer+="Commit: $(git rev-parse --short HEAD)"$'\n\n'
-  buffer+="Modified files:\n"
-  buffer+="$(git status --porcelain)"$'\n```\n\n'
+git_info=$(generate_git_info)
+if [ -n "$git_info" ]; then
+  buffer+="$git_info"$'\n\n'
 fi
 
 # 4. Process Core, Pre-selected, and Dynamic Files

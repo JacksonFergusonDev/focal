@@ -95,3 +95,26 @@ teardown() {
     [[ "$output" == *"# CONTRIBUTING.md"* ]]
     [[ "$output" == *"# Cargo.toml"* ]]
 }
+
+@test "context git info places modified files on their own lines" {
+    echo "# README" > README.md
+    git add .
+    git commit -qm "init"
+    echo "change" >> README.md
+
+    run "$CONTEXT_BIN" -c
+
+    [ "$status" -eq 0 ]
+    [[ "$output" != *'Modified files:\n'* ]]
+    [[ "$output" == *$'Modified files:\n M README.md'* ]]
+}
+
+@test "context --core works in a repository without commits" {
+    echo "# README" > README.md
+
+    run "$CONTEXT_BIN" -c
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Commit: none"* ]]
+    [[ "$output" == *"# README.md"* ]]
+}
