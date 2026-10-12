@@ -78,12 +78,15 @@ def is_bot_author(author_label: str) -> bool:
     return False
 
 
-def run_gh(args: list[str], exit_on_error: bool = True) -> tuple[int, str]:
+def run_gh(
+    args: list[str], exit_on_error: bool = True, hint: str | None = None
+) -> tuple[int, str]:
     """Executes a gh CLI command and returns its exit code and standard output.
 
     Args:
         args: The arguments to pass to the `gh` command.
         exit_on_error: If True, exits the program on failure.
+        hint: Optional actionable advice shown alongside the error.
 
     Returns:
         The return code and stripped standard output.
@@ -95,9 +98,9 @@ def run_gh(args: list[str], exit_on_error: bool = True) -> tuple[int, str]:
     if res.returncode != 0:
         err_msg = f"Error executing gh {' '.join(args)}: {res.stderr.strip()}"
         if exit_on_error:
-            die(err_msg)
+            die(err_msg, hint=hint)
         else:
-            print_error(err_msg)
+            print_error(err_msg, hint=hint)
     return res.returncode, res.stdout.strip()
 
 

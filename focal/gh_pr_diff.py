@@ -1,6 +1,5 @@
 """Fetches and formats GitHub Pull Request descriptions and diffs into markdown."""
 
-from focal.errors import die
 from focal.utils import fenced, run_gh, run_gh_json
 
 
@@ -18,12 +17,9 @@ def get_pr_diff_context(pr_id: str) -> str:
     """
     data = run_gh_json(["pr", "view", pr_id, "--json", "title,body,url"])
 
-    code, diff_out = run_gh(["pr", "diff", pr_id], exit_on_error=False)
-    if code != 0:
-        die(
-            f"error fetching PR diff: {diff_out}",
-            hint="verify that the PR exists and you have access",
-        )
+    _, diff_out = run_gh(
+        ["pr", "diff", pr_id], hint="verify that the PR exists and you have access"
+    )
 
     parts = [f"# PR #{pr_id}: {data.get('title', 'Unknown')}"]
     parts.append(f"URL: {data.get('url', '')}\n")
