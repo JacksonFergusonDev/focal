@@ -1,3 +1,4 @@
+import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -70,7 +71,7 @@ def test_resolve_base_branch_explicit():
 
 def test_resolve_base_branch_dynamic():
     with patch("focal.utils.run_git") as mock_run_git:
-        mock_run_git.side_effect = [(0, "refs/remotes/origin/main")]
+        mock_run_git.side_effect = [(0, "refs/remotes/origin/main"), (0, "")]
         assert wip_context.resolve_base_branch(None) == "main"
 
 
@@ -201,3 +202,37 @@ def test_get_wip_context_with_omitted_files(tmp_path):
         assert "## 4. Omitted Files Metadata" in output
         assert "- `data/large_asset.png` (Size: 2.0K)" in output
         assert "- Type: PNG image data" in output
+
+
+def test_is_noise_matches_extensions_case_insensitively():
+    assert wip_context.is_noise("assets/LOGO.PNG") is True
+    assert wip_context.is_noise("dist/App.Min.JS") is True
+
+
+def _git(cwd, *args):
+    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
+
+
+def test_get_wip_context_in_clone_without_local_base_branch(tmp_path, monkeypatch):
+    origin = tmp_path / "origin"
+    origin.mkdir()
+    _git(origin, "init", "-q", "-b", "main")
+    _git(origin, "config", "user.email", "t@t")
+    _git(origin, "config", "user.name", "t")
+    (origin / "app.py").write_text("x = 1\n")
+    _git(origin, "add", ".")
+    _git(origin, "commit", "-qm", "init")
+    _git(origin, "checkout", "-qb", "feature")
+    (origin / "app.py").write_text("x = 2\n")
+    _git(origin, "commit", "-qam", "change x")
+    _git(origin, "checkout", "-q", "main")
+
+    # Cloning a single branch leaves only origin/main, with no local main
+    clone = tmp_path / "clone"
+    _git(tmp_path, "clone", "-q", "-b", "feature", str(origin), str(clone))
+    monkeypatch.chdir(clone)
+
+    output = wip_context.get_wip_context()
+    assert "**Base:** `origin/main`" in output
+    assert "change x" in output
+    assert "+x = 2" in output
