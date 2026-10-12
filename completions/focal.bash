@@ -6,7 +6,13 @@ _focal_completions() {
     # Declare and assign separately
     commands=$(focal --commands 2>/dev/null)
 
-    # Safely read the newline-separated output into the COMPREPLY array
-    mapfile -t COMPREPLY < <(compgen -W "$commands" -- "$cur_word")
+    # Read line by line rather than with mapfile, which Bash 3.2 (macOS) lacks
+    COMPREPLY=()
+    local candidate
+    while IFS= read -r candidate; do
+      COMPREPLY+=("$candidate")
+    done < <(compgen -W "$commands" -- "$cur_word")
   fi
 }
+
+complete -F _focal_completions focal

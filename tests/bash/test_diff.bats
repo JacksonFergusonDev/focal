@@ -131,3 +131,14 @@ teardown() {
     [ "$status" -eq 0 ]
     [[ "$output" == *$'### Diff\n````diff\n'* ]]
 }
+
+@test "diff reports no changes on stderr so piped output stays empty" {
+    echo "content" > file.txt
+    git add file.txt
+    git commit -qm "init"
+
+    run bash -c "'$DIFF_BIN' 2>/dev/null"
+
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}

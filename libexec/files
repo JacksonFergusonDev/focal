@@ -57,7 +57,6 @@ case "$mode" in
     ;;
   interactive)
     require_cmd "fzf"
-    require_cmd "bat"
     require_cmd "fd"
     files=$(interactive_file_select "Files: " -m --header "TAB: multi-select | CTRL-A: select all | ENTER: confirm")
     ;;
