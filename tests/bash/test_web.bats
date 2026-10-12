@@ -4,6 +4,38 @@ setup() {
     WEB_BIN="${BATS_TEST_DIRNAME}/../../libexec/web"
 }
 
+# Replace curl with a stub so URL tests never depend on live network services.
+# The stub writes FAKE_CURL_BODY to the -o file, prints FAKE_CURL_STATUS as the
+# -w http_code, and records the requested URL in FAKE_CURL_LOG.
+use_fake_curl() {
+    local status="$1"
+    local body="${2:-}"
+    local stub_dir="$BATS_TEST_TMPDIR/bin"
+    mkdir -p "$stub_dir"
+    cat >"$stub_dir/curl" <<'STUB'
+#!/usr/bin/env bash
+out="" url=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o) out="$2"; shift 2 ;;
+    -A | -H | -w | --max-time) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+printf '%s\n' "$url" >"$FAKE_CURL_LOG"
+[ -n "$out" ] && printf '%s' "$FAKE_CURL_BODY" >"$out"
+printf '%s' "$FAKE_CURL_STATUS"
+STUB
+    chmod +x "$stub_dir/curl"
+    export PATH="$stub_dir:$PATH"
+    export FAKE_CURL_STATUS="$status"
+    export FAKE_CURL_BODY="$body"
+    export FAKE_CURL_LOG="$BATS_TEST_TMPDIR/curl_url"
+}
+
+EXAMPLE_HTML='<html><body><h1>Example Domain</h1><p>This domain is for use in documentation examples.</p></body></html>'
+
 @test "web -h prints usage and options" {
     run "$WEB_BIN" -h
 
@@ -43,17 +75,23 @@ setup() {
 }
 
 @test "web converts public URL" {
+    use_fake_curl 200 "$EXAMPLE_HTML"
+
     run "$WEB_BIN" https://example.com
 
     [ "$status" -eq 0 ]
     [[ "$output" == *"# Source: https://example.com"* ]]
+    [[ "$output" == *"# Example Domain"* ]]
     [[ "$output" == *"documentation examples"* ]]
 }
 
 @test "web normalizes bare domain to https" {
+    use_fake_curl 200 "$EXAMPLE_HTML"
+
     run "$WEB_BIN" example.com
 
     [ "$status" -eq 0 ]
+    [ "$(cat "$FAKE_CURL_LOG")" = "https://example.com" ]
     [[ "$output" == *"# Source: https://example.com"* ]]
     [[ "$output" == *"documentation examples"* ]]
 }
@@ -76,6 +114,8 @@ setup() {
 }
 
 @test "web surfaces anti-bot hint on HTTP 999" {
+    use_fake_curl 999
+
     run "$WEB_BIN" https://httpbin.org/status/999
 
     [ "$status" -eq 1 ]
@@ -84,9 +124,30 @@ setup() {
 }
 
 @test "web surfaces not found hint on HTTP 404" {
+    use_fake_curl 404
+
     run "$WEB_BIN" https://httpbin.org/status/404
 
     [ "$status" -eq 1 ]
     [[ "$output" == *"error: HTTP 404 Not Found"* ]]
     [[ "$output" == *"hint: check that the URL path is spelled correctly"* ]]
+}
+
+@test "web reports other HTTP errors with a connectivity hint" {
+    use_fake_curl 503
+
+    run "$WEB_BIN" https://example.com/flaky
+
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"error: HTTP 503 returned for https://example.com/flaky"* ]]
+    [[ "$output" == *"hint: check network connectivity or URL validity"* ]]
+}
+
+@test "web rejects an empty successful response" {
+    use_fake_curl 200 ""
+
+    run "$WEB_BIN" https://example.com
+
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"empty response received"* ]]
 }
