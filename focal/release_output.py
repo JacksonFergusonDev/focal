@@ -5,6 +5,25 @@ import re
 from focal.errors import print_warning
 
 
+def _open_fence(text: str) -> str | None:
+    """Return the fence left open at the end of text, honoring nested longer fences."""
+    open_fence: str | None = None
+    for line in text.splitlines():
+        match = re.match(r"(`{3,}|~{3,})(.*)$", line)
+        if not match:
+            continue
+        marker, rest = match.groups()
+        if open_fence is None:
+            open_fence = marker
+        elif (
+            marker[0] == open_fence[0]
+            and len(marker) >= len(open_fence)
+            and not rest.strip()
+        ):
+            open_fence = None
+    return open_fence
+
+
 def limit_release_output(content: str, max_tokens: int = 24000) -> str:
     """Bound approximate tokens while retaining endpoint metadata and final counts."""
     if max_tokens == 0:
@@ -50,9 +69,9 @@ def limit_release_output(content: str, max_tokens: int = 24000) -> str:
     allowance = max(0, max_chars - len(warning) - len(footer) - 150)
     clipped = body[:allowance].rsplit("\n", 1)[0]
     # Close an open fenced code block when a requested diff or description is cut.
-    fences = re.findall(r"(?m)^(`{3,}|~{3,})[^\n]*$", clipped)
-    if len(fences) % 2:
-        clipped += "\n" + fences[-1]
+    open_fence = _open_fence(clipped)
+    if open_fence:
+        clipped += "\n" + open_fence
     omitted = len(body) - len(clipped)
     warning += f"* {max(0, omitted):,} characters of release detail omitted from the end of the payload.\n"
     print_warning(

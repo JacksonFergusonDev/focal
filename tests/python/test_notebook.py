@@ -381,3 +381,18 @@ def test_build_notebook_metadata_header_defaults():
     assert "- Kernel: Unknown" in header
     assert "- Format: Unknown" in header
     assert "- Cells: 0 total (0 code, 0 markdown)" in header
+
+
+def test_markdown_cell_with_nested_fence_stays_enclosed(tmp_path):
+    nb = {
+        "cells": [
+            {
+                "cell_type": "markdown",
+                "source": ["Run:\n", "```bash\n", "make\n", "```"],
+            }
+        ]
+    }
+    path = tmp_path / "nb.ipynb"
+    path.write_text(json.dumps(nb))
+    result = notebook.notebook_to_llm_text(str(path))
+    assert "````markdown\nRun:\n```bash\nmake\n```\n````" in result

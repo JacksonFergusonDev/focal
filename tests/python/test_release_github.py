@@ -260,3 +260,14 @@ def test_real_hanging_request_is_terminated(tmp_path, monkeypatch):
     assert client.request(["api", "test"]) is None
     assert client.stopped
     assert "timed out" in " ".join(client.notes)
+
+
+def test_output_budget_closes_outer_fence_around_nested_fences():
+    content = (
+        "# Release Context\n\n````markdown\n"
+        + "```bash\necho hi\n```\n" * 3000
+        + "````\n\n## Completeness Notes\n\n* Collected 1 commit.\n"
+    )
+    output = limit_release_output(content, 1000)
+    body = output.split("\n\n## Output Limit")[0]
+    assert body.endswith("\n````")

@@ -13,7 +13,7 @@ from focal.release_notes import (
 )
 from focal.release_output import limit_release_output
 from focal.release_prs import collect_pr_associations
-from focal.utils import is_bot_author, run_git
+from focal.utils import fenced, is_bot_author, run_git
 
 SEMVER_TAG = re.compile(r"^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 
@@ -341,10 +341,11 @@ def get_release_context(
         [
             "\n## Release Impact\n",
             "Net changes between the resolved endpoints (including bot updates):",
-            "```text",
-            _git(["diff", "--no-ext-diff", "--stat", diff_base, head])
-            or "No net file changes.",
-            "```",
+            fenced(
+                _git(["diff", "--no-ext-diff", "--stat", diff_base, head])
+                or "No net file changes.",
+                "text",
+            ),
         ]
     )
     if include_diff:
@@ -352,20 +353,21 @@ def get_release_context(
             [
                 "\n## Focused Diff\n",
                 "Paths: " + (", ".join(paths) if paths else "all paths"),
-                "```diff",
-                _git(
-                    [
-                        "diff",
-                        "--no-ext-diff",
-                        "--no-textconv",
-                        diff_base,
-                        head,
-                        "--",
-                        *paths,
-                    ]
-                )
-                or "No matching changes.",
-                "```",
+                fenced(
+                    _git(
+                        [
+                            "diff",
+                            "--no-ext-diff",
+                            "--no-textconv",
+                            diff_base,
+                            head,
+                            "--",
+                            *paths,
+                        ]
+                    )
+                    or "No matching changes.",
+                    "diff",
+                ),
             ]
         )
     notes.extend(

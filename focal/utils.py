@@ -1,6 +1,7 @@
 """Utility functions for executing external CLI commands and parsing output."""
 
 import json
+import re
 import subprocess
 from typing import Any
 
@@ -20,6 +21,33 @@ BOT_AUTHORS = [
     "github-actions[bot]",
     "github-actions",
 ]
+
+
+def md_fence(content: str) -> str:
+    """Builds a backtick fence that content's own backtick runs cannot close.
+
+    Args:
+        content: The text that will be wrapped in a fenced code block.
+
+    Returns:
+        A run of backticks at least three long and longer than any run in content.
+    """
+    longest = max((len(run) for run in re.findall(r"`+", content)), default=0)
+    return "`" * max(3, longest + 1)
+
+
+def fenced(content: str, lang: str = "") -> str:
+    """Wraps content in a Markdown code block that nested fences cannot break.
+
+    Args:
+        content: The text to wrap.
+        lang: Optional info string (language) for the opening fence.
+
+    Returns:
+        The fenced code block, without a trailing newline.
+    """
+    fence = md_fence(content)
+    return f"{fence}{lang}\n{content}\n{fence}"
 
 
 def build_bot_exclusion_query() -> str:
