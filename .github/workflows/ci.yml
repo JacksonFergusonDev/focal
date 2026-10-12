@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Test on ${{ matrix.os }} / Python ${{ matrix.python-version }}
@@ -14,7 +17,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python-version: ["3.12", "3.14"]
+        python-version: ["3.10", "3.11", "3.12", "3.14"]
 
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -34,15 +37,21 @@ jobs:
 
     - name: Install html-to-markdown
       run: |
+        # Checksums are the published release asset digests; update them with the version.
         if [ "${{ runner.os }}" = "Linux" ]; then
           TARGET="x86_64-unknown-linux-musl"
+          SHA256="45c5dab86315542b6847a00d5dc1b2541f8ccd8d817d061b4c263ac75765dd4c"
         elif [ "${{ runner.os }}" = "macOS" ]; then
           TARGET="aarch64-apple-darwin"
+          SHA256="18d48d1473ca587e0f7726228bc51ba1a6355aab65038a58b0a3d4b0c8499940"
         fi
-        curl -fsSL "https://github.com/xberg-io/html-to-markdown/releases/download/v3.12.2/cli-${TARGET}.tar.gz" | tar -xz
+        ARCHIVE="cli-${TARGET}.tar.gz"
+        curl -fsSLo "$ARCHIVE" "https://github.com/xberg-io/html-to-markdown/releases/download/v3.12.2/${ARCHIVE}"
+        echo "${SHA256}  ${ARCHIVE}" | shasum -a 256 -c -
+        tar -xzf "$ARCHIVE"
         sudo mv "cli-${TARGET}/html-to-markdown" /usr/local/bin/
         sudo chmod +x /usr/local/bin/html-to-markdown
-        rm -rf "cli-${TARGET}"
+        rm -rf "cli-${TARGET}" "$ARCHIVE"
 
     - name: Install uv
       uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
@@ -70,6 +79,17 @@ jobs:
 
     - name: Run Bash tests
       run: bats --print-output-on-failure tests/bash/
+
+    # macOS ships Bash 3.2 as /bin/bash; shadow 'bash' on PATH so bats and every
+    # '#!/usr/bin/env bash' script run under it.
+    - name: Run Bash tests under Bash 3.2
+      if: runner.os == 'macOS' && matrix.python-version == '3.14'
+      run: |
+        mkdir -p "$RUNNER_TEMP/bash32"
+        ln -sf /bin/bash "$RUNNER_TEMP/bash32/bash"
+        export PATH="$RUNNER_TEMP/bash32:$PATH"
+        bash --version | head -n 1
+        bats --print-output-on-failure tests/bash/
 
     - name: Lint Markdown
       uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff # v24

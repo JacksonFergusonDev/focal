@@ -123,6 +123,9 @@ clean:
     find . -type d -name "__pycache__" -exec rm -rf {} +
     @printf "{{ green }}✔ Workspace cleaned{{ nc }}\n"
 
+# Pinned commit of JacksonFergusonDev/ci-cd-release-infrastructure providing the release script
+release_infra_ref := "88b14a7bedb0b338f65efc3d8ec70a3842dabf1b"
+
 # Bump project version (part: major, minor, patch), sync lockfile, commit, tag, and atomic push
 bump part:
-    uv run --refresh https://raw.githubusercontent.com/JacksonFergusonDev/ci-cd-release-infrastructure/refs/heads/main/scripts/release.py {{ part }}
+    uv run --refresh https://raw.githubusercontent.com/JacksonFergusonDev/ci-cd-release-infrastructure/{{ release_infra_ref }}/scripts/release.py {{ part }}
