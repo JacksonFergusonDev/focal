@@ -64,14 +64,6 @@ is_noise_file() {
   return 1
 }
 
-FD_NOISE_FLAGS=()
-for ext in "${FOCAL_NOISE_EXTS[@]}"; do
-  FD_NOISE_FLAGS+=("-E" "*.$ext")
-done
-for file in "${FOCAL_NOISE_FILES[@]}"; do
-  FD_NOISE_FLAGS+=("-E" "$file")
-done
-
 GIT_DIFF_NOISE_EXCLUDES=()
 for ext in "${FOCAL_NOISE_EXTS[@]}"; do
   GIT_DIFF_NOISE_EXCLUDES+=(":(exclude,glob,top)**/*.$ext")
@@ -79,6 +71,10 @@ done
 for file in "${FOCAL_NOISE_FILES[@]}"; do
   GIT_DIFF_NOISE_EXCLUDES+=(":(exclude,glob,top)**/$file")
 done
+
+# Per-file text limits applied by format_file_for_llm
+FOCAL_MAX_FILE_LINES=1500
+FOCAL_MAX_FILE_BYTES=100000
 
 # ------------------------------------------
 # Core Manifest Definitions
@@ -400,11 +396,14 @@ md_fence() {
 
 format_file_for_llm() {
   local file="$1"
-  local ext="${file##*.}"
+  local filename="${file##*/}"
+  # Only the basename can carry an extension; dotted directories and extensionless files get none
+  local ext=""
+  if [[ $filename == *.* ]]; then
+    ext="${filename##*.}"
+  fi
   local ext_lower
   ext_lower=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
-  local filename
-  filename=$(basename "$file")
   local content=""
 
   # Define custom exit codes for out-of-band signaling
@@ -415,9 +414,15 @@ format_file_for_llm() {
     content="[empty file]"
     status_code=10
   elif [[ $ext_lower == "ipynb" ]]; then
-    content=$("$PYTHON_EXEC" -m focal notebook "$file")
+    if ! content=$("$PYTHON_EXEC" -m focal notebook "$file"); then
+      content="# Notebook: $file"$'\n\n'"[notebook could not be parsed]"
+      status_code=11
+    fi
   elif [[ $ext_lower == "pdf" ]]; then
-    content=$("$PYTHON_EXEC" -m focal pdf "$file")
+    if ! content=$("$PYTHON_EXEC" -m focal pdf "$file"); then
+      content="# PDF: $file"$'\n\n'"[PDF could not be parsed]"
+      status_code=11
+    fi
   elif is_noise_file "$file"; then
     local file_meta
     file_meta=$(get_file_metadata "$file")
@@ -433,13 +438,18 @@ format_file_for_llm() {
       content="[binary file omitted: $file]"$'\n'"$file_meta"
       status_code=11
     else
-      # Global Text Failsafe
-      local total_lines
+      # Global Text Failsafe: cap both lines and bytes so minified or single-line files stay bounded
+      local total_lines total_bytes
       total_lines=$(wc -l <"$file" | tr -d ' ')
+      total_bytes=$(wc -c <"$file" | tr -d ' ')
 
-      if [ "$total_lines" -gt 1500 ]; then
-        content=$(head -n 1500 "$file")
-        content+=$'\n\n...[file truncated: showing first 1500 of '"$total_lines"' lines]'
+      if [ "$total_lines" -gt "$FOCAL_MAX_FILE_LINES" ]; then
+        content=$(head -n "$FOCAL_MAX_FILE_LINES" "$file" | head -c "$FOCAL_MAX_FILE_BYTES") || true
+        content+=$'\n\n...[file truncated: showing first '"$FOCAL_MAX_FILE_LINES"' of '"$total_lines"' lines]'
+        status_code=12
+      elif [ "$total_bytes" -gt "$FOCAL_MAX_FILE_BYTES" ]; then
+        content=$(head -c "$FOCAL_MAX_FILE_BYTES" "$file")
+        content+=$'\n\n...[file truncated: showing first '"$FOCAL_MAX_FILE_BYTES"' of '"$total_bytes"' bytes]'
         status_code=12
       else
         content=$(cat "$file")
