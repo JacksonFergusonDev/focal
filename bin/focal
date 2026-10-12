@@ -137,6 +137,11 @@ while [[ $# -gt 0 ]]; do
       REPO_URL="${1#*=}"
       shift 1
       ;;
+    --)
+      # End of global flags: pass '--' and everything after it through untouched
+      REMAINING_ARGS+=("$@")
+      break
+      ;;
     *)
       REMAINING_ARGS+=("$1")
       shift 1
@@ -180,17 +185,19 @@ if [[ -n $REPO_URL ]]; then
   if [ ! -d "$REPO_CACHE_PATH" ]; then
     mkdir -p "$FOCAL_CACHE_DIR"
     status_info "Cloning remote repository into cache..."
-    git clone --filter=blob:none "$REPO_URL" "$REPO_CACHE_PATH" >&2
+    git clone --filter=blob:none -- "$REPO_URL" "$REPO_CACHE_PATH" >&2
     mark_repo_created "$REPO_CACHE_PATH"
   else
     status_info "Updating cached remote repository..."
-    git -C "$REPO_CACHE_PATH" fetch --all >&2
-    # Reset to the default branch's upstream (or fallback to HEAD if detached)
-    # Using 'git remote show origin' to find the default branch is slow,
-    # so we just reset to origin/HEAD or the current tracked branch.
-    # To be safe and ensure we are on the latest default branch:
-    git -C "$REPO_CACHE_PATH" remote set-head origin -a >&2 || true
-    git -C "$REPO_CACHE_PATH" reset --hard origin/HEAD >&2 || true
+    if git -C "$REPO_CACHE_PATH" fetch --all >&2; then
+      # Reset to the remote's default branch. 'git remote show origin' is slow,
+      # so refresh origin/HEAD and reset to it directly.
+      git -C "$REPO_CACHE_PATH" remote set-head origin -a >&2 || true
+      git -C "$REPO_CACHE_PATH" reset --hard origin/HEAD >&2 || true
+    else
+      # Offline or the remote is unreachable: the cached checkout is still usable
+      status_warn "Could not update the cached repository; using the cached copy."
+    fi
   fi
 
   mark_repo_accessed "$REPO_CACHE_PATH"

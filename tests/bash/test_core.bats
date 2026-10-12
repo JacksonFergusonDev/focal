@@ -321,6 +321,7 @@ EOF
     cache_dir=$(mktemp -d)
     legacy_repo="$cache_dir/legacy_repo"
     mkdir -p "$legacy_repo/.git"
+    touch -t 202001010000 "$legacy_repo"
 
     active_repo="$cache_dir/active_repo"
     mkdir -p "$active_repo/.git"
