@@ -106,3 +106,21 @@ jobs:
     - run: cargo test --locked
     - run: cargo build --locked
     - run: FOCAL_TEST_EMPTY_PATH=1 FOCAL_TEST_BIN=target/debug/focal /usr/bin/python3 -m pytest tests/migration
+
+  rust-install:
+    name: Rust install from a clean checkout
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+    - name: Check that every file carries the same version
+      run: python3 scripts/release.py --check
+    - name: Install with cargo install
+      run: cargo install --locked --path . --root "$RUNNER_TEMP/focal-install"
+    - name: Run the installed binary
+      working-directory: ${{ runner.temp }}
+      run: |
+        FOCAL="$RUNNER_TEMP/focal-install/bin/focal"
+        env -i HOME="$RUNNER_TEMP" "$FOCAL" --commands | grep -qx wip-context
+        "$FOCAL" completions bash > focal.bash
+        bash -n focal.bash
+        "$FOCAL" completions zsh | head -n 1 | grep -qx '#compdef focal'
