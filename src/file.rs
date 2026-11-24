@@ -18,7 +18,7 @@ impl Noise {
             .expect("invalid embedded noise.json")
     }
 
-    fn matches(&self, name: &str) -> bool {
+    pub fn matches(&self, name: &str) -> bool {
         let lower = name.to_ascii_lowercase();
         self.files.iter().any(|file| file == name)
             || self.extensions.iter().any(|ext| {

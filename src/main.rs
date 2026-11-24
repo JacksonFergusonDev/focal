@@ -1,10 +1,12 @@
 mod context;
+mod diff;
 mod discovery;
 mod file;
 mod git;
 mod notebook;
 mod search;
 mod tree;
+mod wip;
 
 use clap::{Parser, Subcommand};
 use file::{Noise, Outcome};
@@ -33,6 +35,25 @@ enum Action {
     Symbol {
         #[arg(allow_hyphen_values = true, value_name = "SYMBOL")]
         pattern: Option<String>,
+    },
+    /// Extract a Git diff of unstaged (default), staged, or all changes.
+    Diff {
+        /// Diff staged changes only.
+        #[arg(long, visible_alias = "cached", overrides_with = "all")]
+        staged: bool,
+        /// Diff all changes, including untracked files, against HEAD.
+        #[arg(short, long, overrides_with = "staged")]
+        all: bool,
+        /// Append the repository tree and full contents of changed files.
+        #[arg(long)]
+        thick: bool,
+        #[arg(value_name = "PATH")]
+        paths: Vec<String>,
+    },
+    /// Extract branch topology, status, and prioritized patches since a base branch.
+    WipContext {
+        #[arg(value_name = "BASE")]
+        base: Option<String>,
     },
     /// Extract top-level Python class and function definitions.
     Api,
@@ -246,6 +267,23 @@ fn api() -> io::Result<()> {
     deliver(payload, "API overview copied to clipboard")
 }
 
+fn diff_command(mode: diff::Mode, thick: bool, paths: Vec<String>) -> io::Result<()> {
+    let (body, target) = diff::render(mode, thick, paths)?;
+    let Some(body) = body else {
+        eprintln!("info: No changes detected in {target}.");
+        return Ok(());
+    };
+    let mut payload = header()?;
+    payload.push_str(&body);
+    deliver(payload, &format!("Copied diff of {target}"))
+}
+
+fn wip_context(base: Option<String>) -> io::Result<()> {
+    let mut payload = header()?;
+    payload.push_str(&wip::render(base.as_deref())?);
+    deliver(payload, "Copied WIP branch context")
+}
+
 fn main() -> ExitCode {
     let result = match Cli::parse().command {
         Action::Files {
@@ -266,6 +304,23 @@ fn main() -> ExitCode {
         Action::Search { pattern } => search_command(pattern),
         Action::Symbol { pattern } => symbol(pattern),
         Action::Api => api(),
+        Action::Diff {
+            staged,
+            all,
+            thick,
+            paths,
+        } => diff_command(
+            if all {
+                diff::Mode::All
+            } else if staged {
+                diff::Mode::Staged
+            } else {
+                diff::Mode::Unstaged
+            },
+            thick,
+            paths,
+        ),
+        Action::WipContext { base } => wip_context(base),
         Action::Context { core, all, paths } => context(core, all, paths),
     };
     match result {

@@ -16,6 +16,10 @@ The opt-in Cargo binary supports piped `files --all` and `files <path>...`, incl
 
 `search`, `symbol`, and `api` share one `grep-searcher` pass over ripgrep's default file set: ignore rules apply, hidden entries and binary files are skipped, and `.rgignore` is honored. Output keeps ripgrep's piped format (`./path:match`, `./path-context`, `--` between non-adjacent groups and between files). Files are visited in path order, where ripgrep's order varies between runs.
 
+`diff` and `wip-context` render patches, stats, and topology through `git2`. `diff` keeps the default unstaged, `--staged/--cached`, `-a/--all` (with untracked patches and unborn HEAD), and `--thick` modes, the Status, Summary, and Diff sections, and the warnings about excluded staged, unstaged, and untracked changes. Without explicit paths it excludes noise files before rename detection, so a kept file never pairs with an excluded one. Explicit pathspecs resolve from the invocation directory and override the exclusions. `wip-context` resolves an explicit base, the remote default branch, or main/master/develop (local or `origin/`), and keeps the uncommitted status, topology, net diffstat, root and `.github/` patch priority, the 30,000-character patch budget with closed fences, omitted-file metadata, and the no-divergence diagnostic.
+
+These two commands preserve Git's information rather than its exact bytes. Expected cosmetic differences: libgit2 pads `--stat` counts and scores rename similarity slightly differently, topology omits `git log`'s extra blank lines and rename scores (`R` instead of `R100`), and omitted-file types come from a built-in magic-byte check such as `PNG image data` instead of `file -b`. The shared tests assert on content, section order, and budgets for these commands.
+
 ### Intentional differences
 
 The shared suite marks each of these `xfail(strict=True)` against the legacy dispatcher.
@@ -27,6 +31,7 @@ The shared suite marks each of these `xfail(strict=True)` against the legacy dis
 | `context --all` with a nested `README.md` or other manifest name | `fd --exclude README.md` drops every file with that name at any depth | Excludes only the root manifests already emitted |
 | `context --core README.md` | Emits the manifest twice | Emits it once |
 | `search '('` | Prints ripgrep's parse error, then reports no matches and exits 0 | Reports `invalid regex` and exits 1 |
+| `wip-context` on a branch that renamed a file | Diffs the new path alone, so the patch shows the whole file as added | Detects the rename and shows only the rename header and any edited hunks |
 
 Run the shared contract suite against both executables from the repository root:
 

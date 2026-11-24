@@ -145,7 +145,19 @@ fn line(repo: &Repository, entry: &StatusEntry) -> Result<Option<(Vec<u8>, Strin
 
 /// Renders `git status --porcelain` (v1) with Git's default untracked and rename settings.
 pub fn porcelain(repo: &Repository) -> Result<String, git2::Error> {
+    porcelain_where(repo, &[], |_| true)
+}
+
+/// Porcelain status limited to root-relative `pathspecs` (all when empty) and paths `keep` accepts.
+pub fn porcelain_where(
+    repo: &Repository,
+    pathspecs: &[String],
+    keep: impl Fn(&[u8]) -> bool,
+) -> Result<String, git2::Error> {
     let mut options = StatusOptions::new();
+    for spec in pathspecs {
+        options.pathspec(spec);
+    }
     options
         .include_untracked(true)
         .recurse_untracked_dirs(false)
@@ -158,7 +170,9 @@ pub fn porcelain(repo: &Repository) -> Result<String, git2::Error> {
         if entry.status() == Status::CURRENT || entry.status().is_ignored() {
             continue;
         }
-        if let Some(line) = line(repo, &entry)? {
+        if let Some(line) = line(repo, &entry)?
+            && keep(&line.0)
+        {
             lines.push(line);
         }
     }
@@ -170,7 +184,7 @@ pub fn porcelain(repo: &Repository) -> Result<String, git2::Error> {
         .collect::<String>())
 }
 
-fn relative(path: &Path, prefix: &Path) -> PathBuf {
+pub fn relative(path: &Path, prefix: &Path) -> PathBuf {
     let mut base = prefix;
     let mut ups = PathBuf::new();
     loop {
@@ -182,14 +196,14 @@ fn relative(path: &Path, prefix: &Path) -> PathBuf {
     }
 }
 
-fn prefix(repo: &Repository, cwd: &Path) -> PathBuf {
+pub fn prefix(repo: &Repository, cwd: &Path) -> PathBuf {
     repo.workdir()
         .and_then(|workdir| cwd.strip_prefix(workdir).ok())
         .map(Path::to_path_buf)
         .unwrap_or_default()
 }
 
-fn required(cwd: &Path) -> std::io::Result<Repository> {
+pub fn required(cwd: &Path) -> std::io::Result<Repository> {
     open(cwd)
         .map_err(std::io::Error::other)?
         .ok_or_else(|| std::io::Error::other("not a git repository"))
