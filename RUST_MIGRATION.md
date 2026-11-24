@@ -6,6 +6,8 @@ The behavioral reference for this plan is commit `64b9641`. The milestones below
 
 ## Current implementation
 
+The Rust `tree` command renders hidden entries, empty directories, symlink targets, executable markers, and up to six levels of Git-aware directory structure in process. It sorts sibling entries by filename bytes, which can differ from locale-specific collation in the external `tree` utility.
+
 The opt-in Cargo binary supports piped `files --all` and `files <path>...`, including recursive `dir/` selections. The `ignore` walker discovers hidden files, honors Git, fd, and generic ignore files, and visits sibling entries in path order. Explicit selections retain their first-seen order. The `git2` backend reads branch and commit metadata in process. The shared CLI tests exercise Rust extraction with an empty PATH. Binary detection currently samples for NUL bytes and omitted-file metadata reports the byte count and category. Notebook extraction runs in process and preserves cell order, nested Markdown fences, output MIME precedence, and the 4,000-character per-output limit. Malformed notebooks emit an inline diagnostic so extraction can continue. Nonempty PDFs still produce an explicit error. Terminal output goes to stdout until clipboard support lands. The installed dispatcher remains the complete implementation.
 
 Run the shared contract suite against both executables from the repository root:

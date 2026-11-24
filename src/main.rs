@@ -1,6 +1,7 @@
 mod discovery;
 mod file;
 mod notebook;
+mod tree;
 
 use clap::{Parser, Subcommand};
 use file::{Noise, Outcome};
@@ -19,6 +20,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Action {
+    /// Extract the repository directory tree, up to six levels deep.
+    Tree,
     /// Extract named files, directory contents (dir/), or all discovered files.
     Files {
         #[arg(short, long, conflicts_with = "paths")]
@@ -115,19 +118,11 @@ fn files(all: bool, paths: Vec<PathBuf>) -> io::Result<()> {
         }
         eprintln!("{label} {}", path.display());
     }
-    payload.push_str("\n</context>\n");
-    if io::stdout().is_terminal() {
-        eprintln!("warning: Rust preview writes to stdout; clipboard support is pending.");
-    }
-    io::stdout().lock().write_all(payload.as_bytes())?;
     let what = match last {
         Some(path) if added + truncated + empty == 1 => format!("{} to clipboard", path.display()),
         _ => "context".to_owned(),
     };
-    eprintln!(
-        "done: Copied {what} (~{} tokens)",
-        payload.chars().count() / 4
-    );
+    deliver(payload, &format!("Copied {what}"))?;
     if empty + skipped + truncated > 0 {
         eprintln!("\n--- Extraction Summary ---\nAdded fully: {added} files");
         for (label, count) in [
@@ -143,9 +138,26 @@ fn files(all: bool, paths: Vec<PathBuf>) -> io::Result<()> {
     Ok(())
 }
 
+fn deliver(mut payload: String, message: &str) -> io::Result<()> {
+    payload.push_str("\n</context>\n");
+    if io::stdout().is_terminal() {
+        eprintln!("warning: Rust preview writes to stdout; clipboard support is pending.");
+    }
+    io::stdout().lock().write_all(payload.as_bytes())?;
+    eprintln!("done: {message} (~{} tokens)", payload.chars().count() / 4);
+    Ok(())
+}
+
+fn tree() -> io::Result<()> {
+    let mut payload = header()?;
+    payload.push_str(&tree::render()?);
+    deliver(payload, "Repository tree copied to clipboard")
+}
+
 fn main() -> ExitCode {
     let result = match Cli::parse().command {
         Action::Files { all, paths } => files(all, paths),
+        Action::Tree => tree(),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
