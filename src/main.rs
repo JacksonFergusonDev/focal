@@ -1,3 +1,4 @@
+mod clipboard;
 mod context;
 mod diff;
 mod discovery;
@@ -192,13 +193,27 @@ fn files(selection: Selection) -> io::Result<()> {
     Ok(())
 }
 
+/// Writes the payload to stdout when it is redirected; otherwise copies it to the
+/// clipboard, falling back to stdout with the reason when the clipboard is unavailable.
 fn deliver(mut payload: String, message: &str) -> io::Result<()> {
     payload.push_str("\n</context>\n");
+    let done = format!("done: {message} (~{} tokens)", payload.chars().count() / 4);
     if io::stdout().is_terminal() {
-        eprintln!("warning: Rust preview writes to stdout; clipboard support is pending.");
+        match clipboard::copy(&payload) {
+            Ok(()) => {
+                eprintln!("{done}");
+                return Ok(());
+            }
+            Err(reason) => {
+                eprintln!(
+                    "warning: Could not copy to the clipboard: {reason}. Dumping to stdout..."
+                );
+            }
+        }
+        return io::stdout().lock().write_all(payload.as_bytes());
     }
     io::stdout().lock().write_all(payload.as_bytes())?;
-    eprintln!("done: {message} (~{} tokens)", payload.chars().count() / 4);
+    eprintln!("{done}");
     Ok(())
 }
 
