@@ -8,6 +8,7 @@ mod notebook;
 mod pdf;
 mod search;
 mod tree;
+mod web;
 mod wip;
 
 use clap::{Parser, Subcommand};
@@ -59,6 +60,11 @@ enum Action {
     },
     /// Extract top-level Python class and function definitions.
     Api,
+    /// Convert a web page, or HTML piped on stdin, to Markdown.
+    Web {
+        #[arg(value_name = "URL")]
+        url: Option<String>,
+    },
     /// Extract the tree, Git status, core manifests, and requested files.
     Context {
         /// Extract core context only, plus any named paths.
@@ -305,6 +311,16 @@ fn wip_context(base: Option<String>) -> io::Result<()> {
     deliver(payload, "Copied WIP branch context")
 }
 
+fn web_command(url: Option<String>) -> io::Result<ExitCode> {
+    let Some((body, message)) = web::render(url.as_deref())? else {
+        println!("{}", web::HELP);
+        return Ok(ExitCode::FAILURE);
+    };
+    // Web output never carries the workspace header.
+    deliver(format!("<context>\n{body}"), &message)?;
+    Ok(ExitCode::SUCCESS)
+}
+
 fn main() -> ExitCode {
     let result = match Cli::parse().command {
         Action::Files {
@@ -343,6 +359,10 @@ fn main() -> ExitCode {
         ),
         Action::WipContext { base } => wip_context(base),
         Action::Context { core, all, paths } => context(core, all, paths),
+        Action::Web { url } => match web_command(url) {
+            Ok(code) => return code,
+            Err(error) => Err(error),
+        },
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
