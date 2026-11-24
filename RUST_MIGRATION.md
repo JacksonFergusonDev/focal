@@ -36,6 +36,7 @@ The shared suite marks each of these `xfail(strict=True)` against the legacy dis
 
 | Invocation | Legacy | Rust |
 | --- | --- | --- |
+| `focal` with no arguments under Bash 3.2 (macOS `/bin/bash`) | Exits 1 with `REMAINING_ARGS[@]: unbound variable` | Prints the help menu |
 | `files --staged` from a subdirectory | Reads root-relative paths from `git diff --name-only` and silently skips files that don't resolve from the current directory | Selects every staged file and renders paths relative to the current directory, such as `../src/main.rs` |
 | `files --modified` with a merge conflict | `git ls-files -m` lists the path once per conflict stage, so the file appears up to three times | Lists the file once |
 | `context --all` with a nested `README.md` or other manifest name | `fd --exclude README.md` drops every file with that name at any depth | Excludes only the root manifests already emitted |
