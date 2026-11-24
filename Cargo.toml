@@ -25,3 +25,11 @@ sha2 = "0.11.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 arboard = { version = "3", default-features = false }
+
+# Smaller distributed binary. Keep panic = "unwind": the picker restores the terminal
+# from a Drop guard while a panic unwinds. opt-level stays at 3: "z" is about 30% smaller
+# but has not been measured on large PDF, web, or search inputs.
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
