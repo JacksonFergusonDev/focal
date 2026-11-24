@@ -5,7 +5,7 @@ use crate::file::{Noise, fenced};
 use crate::git;
 use git2::{Commit, Delta, DiffDelta, Oid, Patch, Repository, Sort};
 use std::fs;
-use std::io::{self, Read};
+use std::io;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -169,44 +169,6 @@ fn size(bytes: u64) -> String {
     }
 }
 
-/// A short content-type description from magic bytes, standing in for `file -b`.
-fn describe(path: &Path) -> String {
-    let mut head = Vec::with_capacity(512);
-    if let Ok(file) = fs::File::open(path) {
-        let _ = file.take(512).read_to_end(&mut head);
-    }
-    let magic: [(&[u8], &str); 12] = [
-        (b"\x89PNG\r\n\x1a\n", "PNG image data"),
-        (b"\xff\xd8\xff", "JPEG image data"),
-        (b"GIF8", "GIF image data"),
-        (b"%PDF-", "PDF document"),
-        (b"PK\x03\x04", "Zip archive data"),
-        (b"\x1f\x8b", "gzip compressed data"),
-        (b"BZh", "bzip2 compressed data"),
-        (b"\xfd7zXZ\x00", "XZ compressed data"),
-        (b"SQLite format 3\x00", "SQLite 3.x database"),
-        (b"\x7fELF", "ELF executable"),
-        (b"\xcf\xfa\xed\xfe", "Mach-O 64-bit executable"),
-        (b"\x93NUMPY", "NumPy array data"),
-    ];
-    if let Some((_, name)) = magic.iter().find(|(prefix, _)| head.starts_with(prefix)) {
-        return (*name).into();
-    }
-    if head.is_empty() {
-        return "empty".into();
-    }
-    if head.contains(&0) {
-        return "data".into();
-    }
-    if head.is_ascii() {
-        "ASCII text".into()
-    } else if std::str::from_utf8(&head).is_ok() {
-        "Unicode text, UTF-8 text".into()
-    } else {
-        "data".into()
-    }
-}
-
 /// Appends `### path` patch blocks within the remaining budget; returns how many were cut or skipped.
 fn patches(
     diff: &git2::Diff,
@@ -325,7 +287,7 @@ pub fn render(target: Option<&str>) -> io::Result<String> {
                     Ok(meta) => format!(
                         "- `{path}` (Size: {})\n  - Type: {}",
                         size(meta.len()),
-                        describe(&full)
+                        crate::file::describe(&full)
                     ),
                     Err(_) => format!("- `{path}` (Deleted or inaccessible)"),
                 });

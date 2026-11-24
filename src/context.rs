@@ -17,6 +17,8 @@ const CORE_MANIFESTS: [&str; 6] = [
 pub enum Mode {
     Core,
     All,
+    /// Offer the remaining files in the interactive picker.
+    Pick,
 }
 
 fn git_info(cwd: &Path) -> Result<String, git2::Error> {
@@ -52,6 +54,30 @@ pub fn render(mode: Mode, paths: Vec<PathBuf>) -> io::Result<String> {
         Mode::All => {
             eprintln!("info: Discovering all valid files...");
             discovery::walk(Path::new("."))?
+        }
+        Mode::Pick => {
+            let joined = |paths: &[PathBuf]| {
+                paths
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            let mut header = vec!["TAB: multi-select | CTRL-A: select all".to_owned()];
+            if !core.is_empty() {
+                header.push(format!("Auto-included: {}", joined(&core)));
+            }
+            if !selected.is_empty() {
+                header.push(format!("Pre-selected: {}", joined(&selected)));
+            }
+            let candidates = discovery::walk(Path::new("."))?
+                .into_iter()
+                .filter(|path| !core.contains(path) && !selected.contains(path))
+                .collect();
+            // Declining to pick more still emits the core context and pre-selected files.
+            let picked = crate::picker::pick_paths(candidates, "Additional files: ", header)?
+                .unwrap_or_default();
+            selected.into_iter().chain(picked).collect()
         }
     }
     .into_iter()

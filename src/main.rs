@@ -6,6 +6,8 @@ mod file;
 mod git;
 mod notebook;
 mod pdf;
+mod picker;
+mod preview;
 mod search;
 mod tree;
 mod web;
@@ -86,11 +88,8 @@ enum Action {
         /// Extract tracked files with unstaged changes under the current directory.
         #[arg(short, long, group = "mode")]
         modified: bool,
-        #[arg(
-            required_unless_present = "mode",
-            conflicts_with = "mode",
-            value_name = "PATH"
-        )]
+        /// Files or directories (dir/) to extract; omit to choose interactively.
+        #[arg(conflicts_with = "mode", value_name = "PATH")]
         paths: Vec<PathBuf>,
     },
 }
@@ -120,6 +119,7 @@ enum Selection {
     Staged,
     Modified,
     Paths(Vec<PathBuf>),
+    Pick,
 }
 
 fn files(selection: Selection) -> io::Result<()> {
@@ -137,6 +137,12 @@ fn files(selection: Selection) -> io::Result<()> {
         Selection::Staged => git_paths("staged", git::staged)?,
         Selection::Modified => git_paths("modified", git::modified)?,
         Selection::Paths(paths) => discovery::resolve(paths)?,
+        Selection::Pick => crate::picker::pick_paths(
+            discovery::walk(Path::new("."))?,
+            "Files: ",
+            vec!["TAB: multi-select | CTRL-A: select all | ENTER: confirm".into()],
+        )?
+        .unwrap_or_default(),
     };
     if paths.is_empty() {
         eprintln!("info: No files selected.");
@@ -233,11 +239,7 @@ fn context(core: bool, all: bool, paths: Vec<PathBuf>) -> io::Result<()> {
     let mode = match (core, all) {
         (_, true) => context::Mode::All,
         (true, _) => context::Mode::Core,
-        _ => {
-            return Err(io::Error::other(
-                "the interactive picker is pending in the Rust preview; pass --core or --all",
-            ));
-        }
+        _ => context::Mode::Pick,
     };
     let mut payload = header()?;
     payload.push_str(&context::render(mode, paths)?);
@@ -334,6 +336,8 @@ fn main() -> ExitCode {
             Selection::Staged
         } else if modified {
             Selection::Modified
+        } else if paths.is_empty() {
+            Selection::Pick
         } else {
             Selection::Paths(paths)
         }),
