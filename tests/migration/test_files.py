@@ -363,9 +363,22 @@ def test_modified_conflict_listed_once(tmp_path, env):
     git(tmp_path, env, "checkout", "-q", "main")
     (tmp_path / "conf").write_text("ours\n")
     git(tmp_path, env, "commit", "-qam", "ours")
-    subprocess.run(
-        ["git", "merge", "-q", "other"], cwd=tmp_path, env=env, capture_output=True
+    merge = subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=a",
+            "-c",
+            "user.email=a@example.com",
+            "merge",
+            "other",
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        check=False,
     )
+    assert b"CONFLICT" in merge.stdout + merge.stderr
     result = run(tmp_path, env, "-m")
     assert result.returncode == 0, result.stderr
     assert headings(result) == ["# conf"]

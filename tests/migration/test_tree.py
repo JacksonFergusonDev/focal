@@ -8,6 +8,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 CLI = Path(os.environ.get("FOCAL_TEST_BIN", ROOT / "bin/focal")).resolve()
+LEGACY = "FOCAL_TEST_BIN" not in os.environ
 
 
 @pytest.mark.parametrize("locale", ["C", "en_US.UTF-8"])
@@ -42,7 +43,7 @@ def test_tree_structure(tmp_path, locale):
     assert lines[0] == "<context>"
     # tree versions differ in whether -F annotates the root and symlink target.
     assert lines[1] in {".", "./"}
-    assert lines[2:] == [
+    expected = [
         branch + ".gitignore",
         branch + ".ignore",
         branch + "d/",
@@ -52,6 +53,12 @@ def test_tree_structure(tmp_path, locale):
         end + "z",
         "</context>",
     ]
+    if LEGACY and locale != "C":
+        # The external tree sorts siblings with the locale's collation, which ignores
+        # leading dots under glibc but not on macOS; Rust always sorts by bytes.
+        assert sorted(lines[2:]) == sorted(expected)
+    else:
+        assert lines[2:] == expected
 
 
 def test_tree_depth(tmp_path):
