@@ -10,6 +10,24 @@ The Rust `tree` command renders hidden entries, empty directories, symlink targe
 
 The opt-in Cargo binary supports piped `files --all` and `files <path>...`, including recursive `dir/` selections. The `ignore` walker discovers hidden files, honors Git, fd, and generic ignore files, and visits sibling entries in path order. Explicit selections retain their first-seen order. The `git2` backend reads branch and commit metadata in process. The shared CLI tests exercise Rust extraction with an empty PATH. Binary detection currently samples for NUL bytes and omitted-file metadata reports the byte count and category. Notebook extraction runs in process and preserves cell order, nested Markdown fences, output MIME precedence, and the 4,000-character per-output limit. Malformed notebooks emit an inline diagnostic so extraction can continue. Nonempty PDFs still produce an explicit error. Terminal output goes to stdout until clipboard support lands. The installed dispatcher remains the complete implementation.
 
+`files --staged` and `files --modified` select paths through `git2`. Staged mode compares HEAD (or the empty tree on an unborn branch) to the index with rename detection, drops deletions, and renders working-tree contents. Modified mode compares the index to the working tree under the invocation directory.
+
+`context --core` and `context --all` emit the tree, a Git Info section, the root core manifests, and either the named paths or every discovered file. The Git Info section reproduces `git status --porcelain` from `git2`, including conflict codes, index renames, type changes, collapsed untracked directories, Git's path quoting, and tracked-before-untracked ordering. The interactive picker is pending, so `context` without `--core` or `--all` exits with a diagnostic.
+
+`search`, `symbol`, and `api` share one `grep-searcher` pass over ripgrep's default file set: ignore rules apply, hidden entries and binary files are skipped, and `.rgignore` is honored. Output keeps ripgrep's piped format (`./path:match`, `./path-context`, `--` between non-adjacent groups and between files). Files are visited in path order, where ripgrep's order varies between runs.
+
+### Intentional differences
+
+The shared suite marks each of these `xfail(strict=True)` against the legacy dispatcher.
+
+| Invocation | Legacy | Rust |
+| --- | --- | --- |
+| `files --staged` from a subdirectory | Reads root-relative paths from `git diff --name-only` and silently skips files that don't resolve from the current directory | Selects every staged file and renders paths relative to the current directory, such as `../src/main.rs` |
+| `files --modified` with a merge conflict | `git ls-files -m` lists the path once per conflict stage, so the file appears up to three times | Lists the file once |
+| `context --all` with a nested `README.md` or other manifest name | `fd --exclude README.md` drops every file with that name at any depth | Excludes only the root manifests already emitted |
+| `context --core README.md` | Emits the manifest twice | Emits it once |
+| `search '('` | Prints ripgrep's parse error, then reports no matches and exits 0 | Reports `invalid regex` and exits 1 |
+
 Run the shared contract suite against both executables from the repository root:
 
 ```sh
@@ -117,9 +135,9 @@ Implement list and detail operations separately. Include issue comments and thei
 Use [the release collector](focal/gh_release_context.py), [PR associations](focal/release_prs.py), [release notes](focal/release_notes.py), and [output limiter](focal/release_output.py) together as the reference.
 
 1. Resolve the exclusive base and inclusive head. Preserve reachable stable tag selection, positional levels, aliases, explicit refs, and version/head precedence. Include root commits when the range starts at the empty tree. Preserve commit order, per-commit paths, non-ancestor diagnostics, and shallow-history warnings.
-2. Build the local report even when GitHub enrichment is unavailable. Preserve the previous-release reference, commit-pinned asset URLs, merged PR associations, deterministic grouping, unmatched commits, ambiguous associations, and bot modes. Follow association pages to exhaustion within the request budget. Track failed or skipped lookups separately from confirmed empty results.
-3. Use bounded request concurrency with a shared deadline. Defaults are 10 seconds per request and 60 seconds for GitHub collection. Cap each operation by the remaining time and stop scheduling on exhaustion or a terminal rate-limit response. Keep output order deterministic across completion orders.
-4. Preserve net impact and repeatable `--path` filters for `--diff`. Keep the 24,000-token default and `--max-tokens 0` for full detail. Reapply the limiter after optional `--project-context`, which appends the *current checkout*, with its six-level tree and 500-line manifest excerpts. Preserve omission notices and balanced fences.
+1. Build the local report even when GitHub enrichment is unavailable. Preserve the previous-release reference, commit-pinned asset URLs, merged PR associations, deterministic grouping, unmatched commits, ambiguous associations, and bot modes. Follow association pages to exhaustion within the request budget. Track failed or skipped lookups separately from confirmed empty results.
+1. Use bounded request concurrency with a shared deadline. Defaults are 10 seconds per request and 60 seconds for GitHub collection. Cap each operation by the remaining time and stop scheduling on exhaustion or a terminal rate-limit response. Keep output order deterministic across completion orders.
+1. Preserve net impact and repeatable `--path` filters for `--diff`. Keep the 24,000-token default and `--max-tokens 0` for full detail. Reapply the limiter after optional `--project-context`, which appends the *current checkout*, with its six-level tree and 500-line manifest excerpts. Preserve omission notices and balanced fences.
 
 **Exit criterion.** Test historical release selection from a newer checkout, a root release, a non-linear range, an ambiguous association, failure on page two, deadline expiry midway through collection, and offline local output. Verify range membership, grouping, pinned asset revisions, and final output bounds independently.
 

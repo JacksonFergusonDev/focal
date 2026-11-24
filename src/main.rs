@@ -1,11 +1,13 @@
+mod context;
 mod discovery;
 mod file;
+mod git;
 mod notebook;
+mod search;
 mod tree;
 
 use clap::{Parser, Subcommand};
 use file::{Noise, Outcome};
-use git2::{ErrorCode, Repository};
 use std::fmt::Write as _;
 use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
@@ -22,44 +24,53 @@ struct Cli {
 enum Action {
     /// Extract the repository directory tree, up to six levels deep.
     Tree,
+    /// Search for a regex and extract matches with five lines of context.
+    Search {
+        #[arg(allow_hyphen_values = true, value_name = "PATTERN")]
+        pattern: Option<String>,
+    },
+    /// Extract every file containing a regex, in full.
+    Symbol {
+        #[arg(allow_hyphen_values = true, value_name = "SYMBOL")]
+        pattern: Option<String>,
+    },
+    /// Extract top-level Python class and function definitions.
+    Api,
+    /// Extract the tree, Git status, core manifests, and requested files.
+    Context {
+        /// Extract core context only, plus any named paths.
+        #[arg(short, long, overrides_with = "all")]
+        core: bool,
+        /// Extract core context and append all discovered files.
+        #[arg(short, long, overrides_with = "core")]
+        all: bool,
+        #[arg(value_name = "PATH")]
+        paths: Vec<PathBuf>,
+    },
     /// Extract named files, directory contents (dir/), or all discovered files.
     Files {
-        #[arg(short, long, conflicts_with = "paths")]
+        #[arg(short, long, group = "mode")]
         all: bool,
-        #[arg(required_unless_present = "all", value_name = "PATH")]
+        /// Extract staged files (excluding deletions) from the working tree.
+        #[arg(short, long, group = "mode")]
+        staged: bool,
+        /// Extract tracked files with unstaged changes under the current directory.
+        #[arg(short, long, group = "mode")]
+        modified: bool,
+        #[arg(
+            required_unless_present = "mode",
+            conflicts_with = "mode",
+            value_name = "PATH"
+        )]
         paths: Vec<PathBuf>,
     },
 }
 
 fn append_git_header(text: &mut String, cwd: &Path) -> Result<(), git2::Error> {
-    let repo = match Repository::open_from_env() {
-        Ok(repo) => repo,
-        Err(error) if error.code() == ErrorCode::NotFound => return Ok(()),
-        Err(error) => return Err(error),
-    };
-    let Some(workdir) = repo.workdir() else {
-        return Ok(());
-    };
-    if !cwd.starts_with(workdir) || cwd.starts_with(repo.path()) {
-        return Ok(());
+    if let Some(repo) = git::open(cwd)? {
+        let (branch, commit) = git::head(&repo)?;
+        writeln!(text, "Git Branch: {branch}\nGit Commit: {commit}").unwrap();
     }
-    let reference = repo.find_reference("HEAD")?;
-    let branch = reference
-        .symbolic_target()
-        .and_then(|name| name.strip_prefix("refs/heads/"))
-        .unwrap_or("");
-    let commit = match repo.head() {
-        Ok(head) => head
-            .peel_to_commit()?
-            .as_object()
-            .short_id()?
-            .as_str()
-            .unwrap_or_default()
-            .to_owned(),
-        Err(error) if error.code() == ErrorCode::UnbornBranch => "none".into(),
-        Err(error) => return Err(error),
-    };
-    writeln!(text, "Git Branch: {branch}\nGit Commit: {commit}").unwrap();
     Ok(())
 }
 
@@ -75,12 +86,28 @@ fn header() -> io::Result<String> {
     Ok(text)
 }
 
-fn files(all: bool, paths: Vec<PathBuf>) -> io::Result<()> {
-    let paths = if all {
-        eprintln!("info: Discovering all valid files...");
-        discovery::walk(Path::new("."))?
-    } else {
-        discovery::resolve(paths)?
+enum Selection {
+    All,
+    Staged,
+    Modified,
+    Paths(Vec<PathBuf>),
+}
+
+fn files(selection: Selection) -> io::Result<()> {
+    let git_paths = |kind: &str, select: fn(&Path) -> io::Result<Vec<PathBuf>>| {
+        eprintln!("info: Discovering {kind} files...");
+        let mut paths = select(&std::env::current_dir()?)?;
+        paths.retain(|path| path.is_file());
+        io::Result::Ok(paths)
+    };
+    let paths = match selection {
+        Selection::All => {
+            eprintln!("info: Discovering all valid files...");
+            discovery::walk(Path::new("."))?
+        }
+        Selection::Staged => git_paths("staged", git::staged)?,
+        Selection::Modified => git_paths("modified", git::modified)?,
+        Selection::Paths(paths) => discovery::resolve(paths)?,
     };
     if paths.is_empty() {
         eprintln!("info: No files selected.");
@@ -154,10 +181,92 @@ fn tree() -> io::Result<()> {
     deliver(payload, "Repository tree copied to clipboard")
 }
 
+fn context(core: bool, all: bool, paths: Vec<PathBuf>) -> io::Result<()> {
+    let mode = match (core, all) {
+        (_, true) => context::Mode::All,
+        (true, _) => context::Mode::Core,
+        _ => {
+            return Err(io::Error::other(
+                "the interactive picker is pending in the Rust preview; pass --core or --all",
+            ));
+        }
+    };
+    let mut payload = header()?;
+    payload.push_str(&context::render(mode, paths)?);
+    deliver(payload, "Context and files copied to clipboard")
+}
+
+fn usage(missing: &str, usage: &str) -> io::Error {
+    io::Error::other(format!("{missing}\n  hint: usage: {usage}"))
+}
+
+fn search_command(pattern: Option<String>) -> io::Result<()> {
+    let pattern =
+        pattern.ok_or_else(|| usage("missing search pattern", "focal search <pattern>"))?;
+    let found = search::search(&search::matcher(&pattern)?)?;
+    if found.is_empty() {
+        eprintln!("info: No matches found for '{pattern}'.");
+        return Ok(());
+    }
+    let mut payload = header()?;
+    payload.push_str(found.trim_end_matches('\n'));
+    deliver(payload, "Search results copied to clipboard")
+}
+
+fn symbol(pattern: Option<String>) -> io::Result<()> {
+    let pattern = pattern.ok_or_else(|| usage("missing symbol name", "focal symbol <symbol>"))?;
+    let paths = search::files_matching(&search::matcher(&pattern)?)?;
+    if paths.is_empty() {
+        eprintln!("info: No files found containing symbol '{pattern}'.");
+        return Ok(());
+    }
+    let noise = Noise::load();
+    let mut payload = header()?;
+    for path in &paths {
+        let section = file::format(path, &noise)
+            .map_err(|e| io::Error::new(e.kind(), format!("{}: {e}", path.display())))?;
+        payload.push_str(section.markdown.trim_end_matches('\n'));
+        payload.push_str("\n\n");
+    }
+    payload.truncate(payload.trim_end_matches('\n').len());
+    deliver(
+        payload,
+        &format!("Symbol context for '{pattern}' copied to clipboard"),
+    )
+}
+
+fn api() -> io::Result<()> {
+    let found = search::api()?;
+    if found.is_empty() {
+        eprintln!("info: No Python classes or functions found.");
+        return Ok(());
+    }
+    let mut payload = header()?;
+    payload.push_str(found.trim_end_matches('\n'));
+    deliver(payload, "API overview copied to clipboard")
+}
+
 fn main() -> ExitCode {
     let result = match Cli::parse().command {
-        Action::Files { all, paths } => files(all, paths),
+        Action::Files {
+            all,
+            staged,
+            modified,
+            paths,
+        } => files(if all {
+            Selection::All
+        } else if staged {
+            Selection::Staged
+        } else if modified {
+            Selection::Modified
+        } else {
+            Selection::Paths(paths)
+        }),
         Action::Tree => tree(),
+        Action::Search { pattern } => search_command(pattern),
+        Action::Symbol { pattern } => symbol(pattern),
+        Action::Api => api(),
+        Action::Context { core, all, paths } => context(core, all, paths),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,

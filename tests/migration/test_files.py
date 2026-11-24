@@ -9,6 +9,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 CLI = Path(os.environ.get("FOCAL_TEST_BIN", ROOT / "bin/focal")).resolve()
+LEGACY = "FOCAL_TEST_BIN" not in os.environ
 
 
 @pytest.fixture
@@ -275,3 +276,96 @@ def test_empty_and_malformed_notebooks(tmp_path, env, source):
         assert b"# Notebook: invalid.ipynb\n\n[Error parsing notebook:" in result.stdout
     else:
         assert b"\n[empty file]\n\n" in result.stdout
+
+
+def git(cwd, env, *args):
+    subprocess.run(
+        ["git", "-c", "user.name=a", "-c", "user.email=a@example.com", *args],
+        cwd=cwd,
+        env=env,
+        check=True,
+        capture_output=True,
+    )
+
+
+@pytest.fixture
+def changes(tmp_path, env):
+    git(tmp_path, env, "init", "-q", "-b", "main")
+    (tmp_path / "sub").mkdir()
+    for name in ("gone", "moved", "edited", "sub/inner", "sub/clean"):
+        (tmp_path / name).write_text(f"{name}\n")
+    git(tmp_path, env, "add", ".")
+    git(tmp_path, env, "commit", "-qm", "init")
+    git(tmp_path, env, "rm", "-q", "gone")
+    git(tmp_path, env, "mv", "moved", "renamed")
+    (tmp_path / "edited").write_text("staged\n")
+    (tmp_path / "new").write_text("new\n")
+    git(tmp_path, env, "add", "edited", "new")
+    (tmp_path / "edited").write_text("staged\nthen edited\n")
+    (tmp_path / "sub/inner").write_text("unstaged\n")
+    (tmp_path / "untracked").write_text("u\n")
+    return tmp_path
+
+
+def headings(result):
+    return [
+        line
+        for line in result.stdout.decode().splitlines()
+        if line.startswith("# ") and line != "# Workspace Context"
+    ]
+
+
+def test_staged_selection(changes, env):
+    result = run(changes, env, "--staged")
+    assert result.returncode == 0, result.stderr
+    assert headings(result) == ["# edited", "# new", "# renamed"]
+    assert b"# edited\n```\nstaged\nthen edited\n```\n" in result.stdout
+    assert result.stderr.startswith(b"info: Discovering staged files...\n")
+
+
+def test_staged_unborn_branch(tmp_path, env):
+    git(tmp_path, env, "init", "-q", "-b", "main")
+    (tmp_path / "first").write_text("1\n")
+    git(tmp_path, env, "add", "first")
+    result = run(tmp_path, env, "-s")
+    assert result.returncode == 0, result.stderr
+    assert headings(result) == ["# first"]
+
+
+@pytest.mark.parametrize("subdir", [False, True])
+def test_modified_selection(changes, env, subdir):
+    cwd = changes / "sub" if subdir else changes
+    result = run(cwd, env, "--modified")
+    assert result.returncode == 0, result.stderr
+    expected = ["# inner"] if subdir else ["# edited", "# sub/inner"]
+    assert headings(result) == expected
+    assert result.stderr.startswith(b"info: Discovering modified files...\n")
+
+
+@pytest.mark.xfail(
+    LEGACY, reason="legacy reads root-relative staged paths", strict=True
+)
+def test_staged_from_subdirectory(changes, env):
+    result = run(changes / "sub", env, "--staged")
+    assert result.returncode == 0, result.stderr
+    assert headings(result) == ["# ../edited", "# ../new", "# ../renamed"]
+
+
+@pytest.mark.xfail(LEGACY, reason="legacy lists each conflict stage", strict=True)
+def test_modified_conflict_listed_once(tmp_path, env):
+    git(tmp_path, env, "init", "-q", "-b", "main")
+    (tmp_path / "conf").write_text("base\n")
+    git(tmp_path, env, "add", ".")
+    git(tmp_path, env, "commit", "-qm", "base")
+    git(tmp_path, env, "checkout", "-qb", "other")
+    (tmp_path / "conf").write_text("theirs\n")
+    git(tmp_path, env, "commit", "-qam", "theirs")
+    git(tmp_path, env, "checkout", "-q", "main")
+    (tmp_path / "conf").write_text("ours\n")
+    git(tmp_path, env, "commit", "-qam", "ours")
+    subprocess.run(
+        ["git", "merge", "-q", "other"], cwd=tmp_path, env=env, capture_output=True
+    )
+    result = run(tmp_path, env, "-m")
+    assert result.returncode == 0, result.stderr
+    assert headings(result) == ["# conf"]
