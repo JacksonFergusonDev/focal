@@ -4,6 +4,7 @@ mod discovery;
 mod file;
 mod git;
 mod notebook;
+mod pdf;
 mod search;
 mod tree;
 mod wip;
@@ -137,7 +138,7 @@ fn files(selection: Selection) -> io::Result<()> {
 
     let noise = Noise::load();
     let mut payload = header()?;
-    let (mut added, mut empty, mut skipped, mut truncated) = (0, 0, 0, 0);
+    let (mut added, mut empty, mut skipped, mut truncated, mut failed) = (0, 0, 0, 0, 0);
     let mut last = None;
     for path in &paths {
         let section = file::format(path, &noise)
@@ -160,8 +161,12 @@ fn files(selection: Selection) -> io::Result<()> {
                 skipped += 1;
                 "skipped: noise/binary:"
             }
+            Outcome::Failed => {
+                failed += 1;
+                "failed: (no text extracted):"
+            }
         };
-        if !matches!(section.outcome, Outcome::Skipped) {
+        if !matches!(section.outcome, Outcome::Skipped | Outcome::Failed) {
             last = Some(path);
         }
         eprintln!("{label} {}", path.display());
@@ -171,12 +176,13 @@ fn files(selection: Selection) -> io::Result<()> {
         _ => "context".to_owned(),
     };
     deliver(payload, &format!("Copied {what}"))?;
-    if empty + skipped + truncated > 0 {
+    if empty + skipped + truncated + failed > 0 {
         eprintln!("\n--- Extraction Summary ---\nAdded fully: {added} files");
         for (label, count) in [
             ("Added empty", empty),
             ("Truncated (size limit)", truncated),
             ("Skipped (noise/binary)", skipped),
+            ("Failed (no text extracted)", failed),
         ] {
             if count > 0 {
                 eprintln!("{label}: {count} files");

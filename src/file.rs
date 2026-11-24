@@ -1,6 +1,6 @@
 use serde::Deserialize;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader};
+use std::io::{self, BufRead, BufReader, Read};
 use std::path::Path;
 
 const MAX_LINES: usize = 1_500;
@@ -34,6 +34,8 @@ pub enum Outcome {
     Empty,
     Skipped,
     Truncated,
+    /// A document (such as a PDF) whose text could not be extracted; the reason is inline.
+    Failed,
 }
 
 pub struct Section {
@@ -60,13 +62,21 @@ pub fn format(path: &Path, noise: &Noise) -> io::Result<Section> {
             outcome: Outcome::Text,
         });
     }
+    if pdf {
+        let mut bytes = Vec::with_capacity(size as usize);
+        BufReader::new(file).read_to_end(&mut bytes)?;
+        let (markdown, extracted) = crate::pdf::render(path, &bytes);
+        return Ok(Section {
+            markdown,
+            outcome: if extracted {
+                Outcome::Text
+            } else {
+                Outcome::Failed
+            },
+        });
+    }
     let (content, outcome) = if size == 0 {
         ("[empty file]".to_owned(), Outcome::Empty)
-    } else if pdf {
-        return Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "PDF extraction is pending in the Rust preview",
-        ));
     } else if noise.matches(&name) {
         (omitted(path, size, "asset/noise"), Outcome::Skipped)
     } else {
