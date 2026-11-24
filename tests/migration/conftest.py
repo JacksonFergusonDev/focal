@@ -7,10 +7,14 @@ recorded on `github.requests` for assertions. `github_checkout` creates a Git re
 whose `origin` is a GitHub URL, so repository detection works without a network.
 """
 
+import fcntl
 import json
 import os
+import struct
 import subprocess
+import termios
 import threading
+import time
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -164,3 +168,92 @@ def run_focal(cwd: Path, env: dict[str, str], *args: str, stdin: bytes | None = 
         capture_output=True,
         check=False,
     )
+
+
+class Session:
+    """Runs one command on a pseudo-terminal and records what it draws."""
+
+    def __init__(self, cwd, *args, env=None):
+        self.master, self.slave = os.openpty()
+        fcntl.ioctl(self.slave, termios.TIOCSWINSZ, struct.pack("HHHH", 30, 120, 0, 0))
+        self.name = os.ttyname(self.slave)
+        self.before = termios.tcgetattr(self.slave)
+        self.output = cwd.parent / "result.md"
+        slave = self.slave
+
+        def controlling_terminal():
+            os.setsid()
+            fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
+
+        path = "" if os.environ.get("FOCAL_TEST_EMPTY_PATH") else os.environ["PATH"]
+        with self.output.open("wb") as stdout:
+            self.proc = subprocess.Popen(
+                [CLI, *args],
+                cwd=cwd,
+                stdin=slave,
+                stdout=stdout,
+                stderr=subprocess.PIPE,
+                preexec_fn=controlling_terminal,
+                pass_fds=(slave,),
+                env={
+                    "PATH": path,
+                    "HOME": str(cwd.parent),
+                    "TERM": "xterm-256color",
+                    "LC_ALL": "C.UTF-8",
+                    "NO_COLOR": "1",
+                    "FOCAL_OMIT_WORKSPACE": "1",
+                    **(env or {}),
+                },
+            )
+        self.screen = bytearray()
+        threading.Thread(target=self._read, daemon=True).start()
+
+    def _read(self):
+        while True:
+            try:
+                chunk = os.read(self.master, 65536)
+            except OSError:
+                return
+            if not chunk:
+                return
+            self.screen.extend(chunk)
+
+    def wait_for(self, text, timeout=10.0):
+        deadline = time.monotonic() + timeout
+        while text.encode() not in self.screen:
+            assert time.monotonic() < deadline, f"never drew {text!r}"
+            time.sleep(0.02)
+
+    def send(self, *keys, pause=0.3):
+        for key in keys:
+            os.write(self.master, key)
+            time.sleep(pause)
+
+    def finish(self):
+        _, err = self.proc.communicate(timeout=20)
+        try:
+            after = termios.tcgetattr(self.slave)
+        except termios.error:
+            # macOS revokes the terminal from other holders when the session leader exits.
+            fd = os.open(self.name, os.O_RDWR | os.O_NOCTTY)
+            after = termios.tcgetattr(fd)
+            os.close(fd)
+        os.close(self.slave)
+        os.close(self.master)
+        return self.proc.returncode, err.decode(), self.output.read_text(), after
+
+
+@pytest.fixture
+def terminal():
+    """Starts `focal <args>` on a pseudo-terminal: `terminal(cwd, *args, env=None)`.
+
+    The process gets the terminal as its controlling TTY while stdout goes to
+    `cwd.parent / "result.md"`. Use `wait_for`, `send`, and `finish` to drive it.
+    """
+    return Session
+
+
+@pytest.fixture
+def focal():
+    """Runs the binary under test: `focal(cwd, env, *args, stdin=None)`."""
+    return run_focal
