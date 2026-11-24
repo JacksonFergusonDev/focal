@@ -40,13 +40,16 @@ jobs:
             os: macos-15
           - target: x86_64-apple-darwin
             os: macos-15-intel
-          # Building on Ubuntu 22.04 sets the glibc floor at 2.35 and links OpenSSL 3.
+          # Building on Ubuntu 22.04 sets the glibc floor at 2.35.
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-22.04
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-22.04-arm
     env:
       MACOSX_DEPLOYMENT_TARGET: "11.0"
+      # git2 pulls in openssl-sys; link it statically so the archive does not depend on
+      # the runner's Homebrew OpenSSL (macOS) or libssl3 (Linux).
+      OPENSSL_STATIC: "1"
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -63,6 +66,10 @@ jobs:
     - name: Install build dependencies (Linux)
       if: runner.os == 'Linux'
       run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
+
+    - name: Locate OpenSSL (macOS)
+      if: runner.os == 'macOS'
+      run: echo "OPENSSL_DIR=$(brew --prefix openssl@3)" >> "$GITHUB_ENV"
 
     - name: Install Rust
       run: |
@@ -85,9 +92,17 @@ jobs:
         ls -l "$BIN"
         if [ "${{ runner.os }}" = "macOS" ]; then
           otool -L "$BIN"
+          if otool -L "$BIN" | grep -E '/opt/homebrew|/usr/local|libssl|libcrypto'; then
+            echo "::error::binary links a non-system library"
+            exit 1
+          fi
           otool -l "$BIN" | grep -A4 -E 'LC_BUILD_VERSION|LC_VERSION_MIN_MACOSX'
         else
           ldd "$BIN"
+          if ldd "$BIN" | grep -E 'libssl|libcrypto'; then
+            echo "::error::binary links OpenSSL dynamically"
+            exit 1
+          fi
           echo "Highest glibc symbol version:"
           objdump -T "$BIN" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -n 1
         fi
