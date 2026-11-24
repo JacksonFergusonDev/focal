@@ -221,7 +221,8 @@ pub fn commits(
         commits.push(Commit {
             sha: commit.id().to_string(),
             author: String::from_utf8_lossy(commit.author().name_bytes()).into_owned(),
-            subject: commit.summary().unwrap_or_default().to_owned(),
+            subject: String::from_utf8_lossy(commit.summary_bytes().unwrap_or_default())
+                .into_owned(),
             paths,
         });
     }
