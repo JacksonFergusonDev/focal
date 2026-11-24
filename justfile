@@ -123,9 +123,62 @@ clean:
     find . -type d -name "__pycache__" -exec rm -rf {} +
     @printf "{{ green }}✔ Workspace cleaned{{ nc }}\n"
 
-# Pinned commit of JacksonFergusonDev/ci-cd-release-infrastructure providing the release script
-release_infra_ref := "88b14a7bedb0b338f65efc3d8ec70a3842dabf1b"
+# --- Rust binary (preview until cutover; `just install` stays the legacy layout) ---
 
-# Bump project version (part: major, minor, patch), sync lockfile, commit, tag, and atomic push
+rust_bin := justfile_directory() + "/target/release/focal"
+
+# Build the optimized Rust binary
+rust-build:
+    cargo build --locked --release
+
+# Check formatting, lint, unit tests, and the parity suite against both executables
+rust-test: rust-build
+    @printf "\n{{ blue }}=== Testing the Rust binary ==={{ nc }}\n"
+    cargo fmt --check
+    cargo clippy --locked --all-targets -- -D warnings
+    cargo test --locked
+    @printf "{{ cyan }}Parity suite against the legacy dispatcher...{{ nc }}\n"
+    uv run pytest tests/migration -q
+    @printf "{{ cyan }}Parity suite against the Rust binary, with nothing on PATH...{{ nc }}\n"
+    FOCAL_TEST_EMPTY_PATH=1 FOCAL_TEST_BIN="{{ rust_bin }}" uv run pytest tests/migration -q
+    @printf "{{ green }}✔ Rust checks passed{{ nc }}\n"
+
+# Install the Rust binary as focal-rs alongside the legacy focal
+rust-install: rust-build
+    mkdir -p {{ prefix }}
+    install -m 755 "{{ rust_bin }}" "{{ prefix }}/focal-rs"
+    @printf "{{ green }}✔ Installed {{ prefix }}/focal-rs{{ nc }}\n"
+
+# Remove the focal-rs binary
+rust-uninstall:
+    rm -f "{{ prefix }}/focal-rs"
+    @printf "{{ green }}✔ Removed {{ prefix }}/focal-rs{{ nc }}\n"
+
+# Build a release archive for this machine, as the release workflow does, into target/dist/
+rust-package: rust-build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version="$(uv run --no-project scripts/release.py --check)"
+    target="$(rustc -vV | sed -n 's/^host: //p')"
+    name="focal-${version}-${target}"
+    rm -rf "target/dist/${name}" "target/dist/${name}.tar.gz"
+    mkdir -p "target/dist/${name}/completions"
+    cp "{{ rust_bin }}" README.md LICENSE "target/dist/${name}/"
+    "{{ rust_bin }}" completions bash > "target/dist/${name}/completions/focal.bash"
+    "{{ rust_bin }}" completions zsh > "target/dist/${name}/completions/_focal"
+    tar -C target/dist -czf "target/dist/${name}.tar.gz" "${name}"
+    (cd target/dist && shasum -a 256 "${name}.tar.gz" | tee "${name}.tar.gz.sha256")
+
+# --- Release ---
+
+# Bump the version in pyproject.toml, uv.lock, Cargo.toml, and Cargo.lock, then commit, tag, and atomic push
 bump part:
-    uv run --refresh https://raw.githubusercontent.com/JacksonFergusonDev/ci-cd-release-infrastructure/{{ release_infra_ref }}/scripts/release.py {{ part }}
+    uv run --no-project scripts/release.py {{ part }}
+
+# Validate a version bump without changing anything
+bump-dry-run part:
+    uv run --no-project scripts/release.py {{ part }} --dry-run
+
+# Print the version, failing if the version-carrying files disagree
+version:
+    uv run --no-project scripts/release.py --check
