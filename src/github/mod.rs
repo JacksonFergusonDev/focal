@@ -17,6 +17,8 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 use ureq::config::RedirectAuthHeaders;
 
+pub(crate) mod track_c;
+
 /// Default per-request timeout.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(20);
 /// Upper bound on pages followed by [`Client::get_all`], as a runaway guard.
