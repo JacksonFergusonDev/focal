@@ -7,9 +7,6 @@
 //! is installed. `FOCAL_GITHUB_API_URL` overrides the API base, which the tests use to
 //! point the client at a local fixture server.
 
-// Remove once the GitHub commands use the client (migration tracks A-C).
-#![allow(dead_code)]
-
 use serde_json::Value;
 use std::fmt;
 use std::io;
