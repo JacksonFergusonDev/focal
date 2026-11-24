@@ -14,7 +14,7 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 use ureq::config::RedirectAuthHeaders;
 
-mod track_b;
+mod download;
 
 /// Default per-request timeout.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(20);
