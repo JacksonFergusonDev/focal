@@ -46,18 +46,39 @@ pub fn format(path: &Path, noise: &Noise) -> io::Result<Section> {
     let ext = name.rsplit_once('.').map_or("", |(_, ext)| ext);
     let file = File::open(path)?;
     let size = file.metadata()?.len();
+    let notebook = ext.eq_ignore_ascii_case("ipynb");
+    let pdf = ext.eq_ignore_ascii_case("pdf");
+    if size == 0 && (notebook || pdf) {
+        return Ok(Section {
+            markdown: "[empty file]\n\n".into(),
+            outcome: Outcome::Empty,
+        });
+    }
+    if notebook {
+        return Ok(Section {
+            markdown: crate::notebook::render(path, file),
+            outcome: Outcome::Text,
+        });
+    }
     let (content, outcome) = if size == 0 {
         ("[empty file]".to_owned(), Outcome::Empty)
-    } else if ext.eq_ignore_ascii_case("ipynb") || ext.eq_ignore_ascii_case("pdf") {
+    } else if pdf {
         return Err(io::Error::new(
             io::ErrorKind::Unsupported,
-            "document extraction is pending in the Rust preview",
+            "PDF extraction is pending in the Rust preview",
         ));
     } else if noise.matches(&name) {
         (omitted(path, size, "asset/noise"), Outcome::Skipped)
     } else {
         read_text(file, path, size)?
     };
+    Ok(Section {
+        markdown: format!("# {}\n{}\n\n", path.display(), fenced(&content, ext)),
+        outcome,
+    })
+}
+
+pub fn fenced(content: &str, language: &str) -> String {
     let longest = content
         .as_bytes()
         .split(|&byte| byte != b'`')
@@ -65,10 +86,7 @@ pub fn format(path: &Path, noise: &Noise) -> io::Result<Section> {
         .max()
         .unwrap_or_default();
     let fence = "`".repeat(3.max(longest + 1));
-    Ok(Section {
-        markdown: format!("# {}\n{fence}{ext}\n{content}\n{fence}\n\n", path.display()),
-        outcome,
-    })
+    format!("{fence}{language}\n{content}\n{fence}")
 }
 
 fn omitted(path: &Path, size: u64, kind: &str) -> String {

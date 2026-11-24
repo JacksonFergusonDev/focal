@@ -1,5 +1,6 @@
 """Public CLI contracts shared by the legacy dispatcher and the Rust preview."""
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -198,3 +199,79 @@ def test_detached_head(tmp_path, env):
     result = run(tmp_path, env)
     assert result.returncode == 0, result.stderr
     assert b"Git Branch: \nGit Commit: " + sha + b"\n" in result.stdout
+
+
+def test_notebook_rendering(tmp_path, env):
+    path = tmp_path / "demo.IPYNB"
+    payload = {
+        "nbformat": 4,
+        "nbformat_minor": 5,
+        "metadata": {"kernelspec": {"language": "Julia", "display_name": "Julia 1"}},
+        "cells": [
+            {"cell_type": "markdown", "source": ["Example\n", "```"]},
+            {
+                "cell_type": "code",
+                "source": "answer()",
+                "execution_count": 0,
+                "outputs": [
+                    {
+                        "output_type": "stream",
+                        "name": "stderr",
+                        "text": ["\x1b[31mé\x1b[0m", "é" * 4000],
+                    },
+                    {
+                        "output_type": "display_data",
+                        "data": {"text/plain": "fallback", "image/png": "unused"},
+                    },
+                    {
+                        "output_type": "execute_result",
+                        "data": {"text/html": "<p>html</p>", "text/latex": "unused"},
+                    },
+                    {
+                        "output_type": "display_data",
+                        "data": {"application/json": {"z": "é", "a": True}},
+                    },
+                    {
+                        "output_type": "error",
+                        "ename": "E",
+                        "evalue": "failed",
+                        "traceback": ["\x1b[32mline\x1b[0m"],
+                    },
+                ],
+            },
+            {"cell_type": "code", "source": " \n"},
+            {"cell_type": "raw", "metadata": {"format": "latex"}, "source": "raw"},
+        ],
+    }
+    path.write_text(json.dumps(payload))
+    result = run(tmp_path, env, path.name)
+    assert result.returncode == 0, result.stderr
+    document = result.stdout.decode().split("\n---\n\n")[1]
+    assert document == (
+        "# Notebook: demo.IPYNB\n\n## Notebook Metadata\n\n"
+        "- Kernel: Julia 1\n- Language: julia\n- Format: nbformat 4.5\n"
+        "- Cells: 4 total (2 code, 1 markdown, 1 raw)\n\n"
+        "## Markdown cell 1\n\n````markdown\nExample\n```\n````\n\n"
+        "## Code cell 2 [execution: 0]\n\n```julia\nanswer()\n```\n\n"
+        "### Output\n\n```text\n[stderr]\n"
+        + "é"
+        * 4000
+        + "\n...[output truncated]\n```\n\n### Output\n\n[image output omitted]\n\n"
+        "### Output\n\n```text\nhtml\n```\n\n"
+        '### Output\n\n```json\n{\n  "z": "\\u00e9",\n  "a": true\n}\n```\n\n'
+        "### Output\n\n```text\n[error]\nE: failed\nline\n```\n\n"
+        "## Raw cell 4\n\n```latex\nraw\n```\n\n\n</context>\n"
+    )
+
+
+@pytest.mark.parametrize("source", ["", "[]", "{"])
+def test_empty_and_malformed_notebooks(tmp_path, env, source):
+    (tmp_path / "invalid.ipynb").write_text(source)
+    (tmp_path / "keep.txt").write_text("still here")
+    result = run(tmp_path, env, "invalid.ipynb", "keep.txt")
+    assert result.returncode == 0, result.stderr
+    assert b"# keep.txt\n" in result.stdout
+    if source:
+        assert b"# Notebook: invalid.ipynb\n\n[Error parsing notebook:" in result.stdout
+    else:
+        assert b"\n[empty file]\n\n" in result.stdout

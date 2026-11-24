@@ -1,5 +1,6 @@
 mod discovery;
 mod file;
+mod notebook;
 
 use clap::{Parser, Subcommand};
 use file::{Noise, Outcome};
