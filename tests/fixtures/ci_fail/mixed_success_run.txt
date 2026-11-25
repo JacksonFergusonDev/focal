@@ -1,0 +1,50 @@
+<context>
+# CI Failure Context: CI - Fix the widget
+
+```text
+[error logs]
+collected item 5
+collected item 6
+collected item 7
+collected item 8
+collected item 9
+collected item 10
+collected item 11
+collected item 12
+collected item 13
+collected item 14
+collected item 15
+collected item 16
+collected item 17
+collected item 18
+collected item 19
+FAILED tests/test_widget.py::test_spin - AssertionError
+at 2026-01-01T00:00:00Z the clock stopped
+teardown 0
+teardown 1
+teardown 2
+teardown 3
+teardown 4
+teardown 5
+teardown 6
+teardown 7
+teardown 8
+...
+teardown 16
+teardown 17
+teardown 18
+teardown 19
+teardown 20
+teardown 21
+teardown 22
+teardown 23
+teardown 24
+teardown 25
+teardown 26
+teardown 27
+teardown 28
+teardown 29
+> [Group completed successfully: Upload report]
+##[error]Process completed with exit code 1.
+```
+</context>

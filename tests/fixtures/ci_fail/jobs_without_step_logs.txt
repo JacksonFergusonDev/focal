@@ -1,0 +1,11 @@
+<context>
+# CI Failure Context: CI - Fix the widget
+
+```text
+[error logs]
+compiling
+error: missing semicolon
+rendering
+Error: timed out
+```
+</context>
