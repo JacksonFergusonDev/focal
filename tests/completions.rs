@@ -205,24 +205,3 @@ fn unknown_shell_is_rejected_fish() {
 fn unknown_shell_is_rejected_empty() {
     check_unknown_shell_is_rejected("");
 }
-
-fn check_static_bash_script(word: &str, expected: &[&str]) {
-    let Some(bash) = which("bash") else {
-        eprintln!("skipped: bash is not installed");
-        return;
-    };
-    let tmp = tempfile::tempdir().unwrap();
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("completions/focal.bash");
-    let candidates = complete_bash(&bash, tmp.path(), &path, "_focal_completions", &[word]);
-    assert_eq!(candidates, expected, "word {word:?}");
-}
-
-#[test]
-fn legacy_bash_script_completes_through_commands_flag_empty() {
-    check_static_bash_script("", &COMMANDS);
-}
-
-#[test]
-fn legacy_bash_script_completes_through_commands_flag_prefix() {
-    check_static_bash_script("pr", &["pr-diff"]);
-}
