@@ -77,7 +77,7 @@ fn focal_without_terminal(cwd: &Path, env: &Env, args: &[&str]) -> Output {
     command
         .args(args)
         .current_dir(cwd)
-        .env_clear()
+        .clean_env()
         .envs(env.iter().map(|(k, v)| (k, v)))
         .stdin(Stdio::null())
         .stdout(Stdio::piped())

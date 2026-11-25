@@ -65,7 +65,7 @@ fn run_on_terminal(cwd: &Path, env: &Env, args: &[&str]) -> (Vec<u8>, String, Op
     let output = Command::new(bin())
         .args(args)
         .current_dir(cwd)
-        .env_clear()
+        .clean_env()
         .envs(env.iter().map(|(k, v)| (k, v)))
         .stdin(Stdio::null())
         .stdout(Stdio::from(slave))

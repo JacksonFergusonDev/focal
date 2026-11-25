@@ -7,7 +7,6 @@ readme = "README.md"
 license = "MIT"
 authors = ["Jackson Ferguson <jackson.ferguson0@gmail.com>"]
 repository = "https://github.com/JacksonFergusonDev/focal"
-homepage = "https://github.com/JacksonFergusonDev/focal"
 keywords = ["cli", "llm", "context", "git", "github"]
 categories = ["command-line-utilities", "development-tools"]
 publish = false

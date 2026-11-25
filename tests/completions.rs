@@ -79,7 +79,7 @@ fn complete_bash(
         .arg("focal")
         .args(words)
         .current_dir(tmp)
-        .env_clear()
+        .clean_env()
         .env("PATH", &bin_dir)
         .env("HOME", tmp)
         .env("LC_ALL", "C")

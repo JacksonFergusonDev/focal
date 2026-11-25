@@ -201,7 +201,7 @@ fn spawn_focal(tmp: &Path, args: &[&str], piped: bool) -> Child {
     Command::new(bin())
         .args(args)
         .current_dir(elsewhere(tmp))
-        .env_clear()
+        .clean_env()
         .envs(focal_env(tmp, &[]))
         .stdin(Stdio::null())
         .stdout(stdio())

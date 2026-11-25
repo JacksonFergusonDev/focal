@@ -31,6 +31,26 @@ pub fn bin() -> PathBuf {
 /// Environment variables, applied to a cleared environment.
 pub type Env = Vec<(String, String)>;
 
+/// Clears a command's environment like `env_clear`, but keeps the variables that coverage
+/// instrumentation needs (`LLVM_PROFILE_FILE` and friends from `cargo llvm-cov`), so the
+/// binary's own lines count when tests run it.
+pub trait CleanEnv {
+    fn clean_env(&mut self) -> &mut Self;
+}
+
+impl CleanEnv for Command {
+    fn clean_env(&mut self) -> &mut Self {
+        self.env_clear();
+        for (key, value) in std::env::vars_os() {
+            let name = key.to_string_lossy();
+            if name.starts_with("LLVM_PROFILE") || name.starts_with("CARGO_LLVM_COV") {
+                self.env(key, value);
+            }
+        }
+        self
+    }
+}
+
 /// Builds an [`Env`] from string pairs.
 pub fn env(pairs: &[(&str, &str)]) -> Env {
     pairs
@@ -72,7 +92,7 @@ pub fn run_with<S: AsRef<OsStr>>(
     command
         .args(args)
         .current_dir(cwd)
-        .env_clear()
+        .clean_env()
         .envs(env.iter().map(|(k, v)| (k, v)))
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -456,7 +476,7 @@ impl Session {
         command
             .args(args)
             .current_dir(cwd)
-            .env_clear()
+            .clean_env()
             .envs(environment.iter().map(|(k, v)| (k, v)))
             .stdin(Stdio::from(stdin))
             .stdout(Stdio::from(stdout))
@@ -596,7 +616,8 @@ fn openpty() -> (OwnedFd, OwnedFd) {
             &mut slave,
             std::ptr::null_mut(),
             std::ptr::null_mut(),
-            &mut size,
+            // A raw pointer: the parameter is `*mut` on macOS and `*const` on Linux.
+            &raw mut size,
         )
     };
     assert_eq!(rc, 0, "openpty");
