@@ -14,8 +14,7 @@ pub struct Noise {
 
 impl Noise {
     pub fn load() -> Self {
-        serde_json::from_str(include_str!("noise.json"))
-            .expect("invalid embedded noise.json")
+        serde_json::from_str(include_str!("noise.json")).expect("invalid embedded noise.json")
     }
 
     pub fn matches(&self, name: &str) -> bool {

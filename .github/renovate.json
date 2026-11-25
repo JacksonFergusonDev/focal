@@ -5,11 +5,17 @@
         ":semanticCommits",
         ":prHourlyLimit2"
     ],
+    "ignorePaths": [
+        "docs/**",
+        "scripts/**",
+        "src/**",
+        "tests/**"
+    ],
     "schedule": [
         "before 4am on monday"
     ],
     "internalChecksFilter": "strict",
-    "rebaseWhen": "behind-base-branch",
+    "rebaseWhen": "conflicted",
     "labels": [
         "dependencies",
         "chore"
@@ -21,7 +27,7 @@
     },
     "packageRules": [
         {
-            "description": "Require a package to be 2 weeks old before updating, excluding vulnerabilities.",
+            "description": "Require a package to be 2 weeks old before updating, but exclude vulnerability remediation from this wait.",
             "matchUpdateTypes": [
                 "major",
                 "minor",
@@ -32,16 +38,14 @@
             "minimumReleaseAge": "2 weeks"
         },
         {
-            "description": "Group all Python dev-dependencies (ci/dev groups) and pre-commit hooks into one automerging PR.",
+            "description": "Group Rust dev-dependencies into one PR and automerge them.",
             "matchManagers": [
-                "pep621",
-                "pre-commit"
+                "cargo"
             ],
             "matchDepTypes": [
-                "ci",
-                "dev"
+                "dev-dependencies"
             ],
-            "groupName": "dev-tools-and-linters",
+            "groupName": "rust-dev-deps",
             "automerge": true
         },
         {
