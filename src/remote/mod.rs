@@ -23,7 +23,10 @@ pub fn enter(url: &str) -> io::Result<()> {
     let root = cache::root()?;
     fs::create_dir_all(&root).map_err(|error| {
         crate::output::fail(
-            format!("could not create the --repo cache at {}: {error}", root.display()),
+            format!(
+                "could not create the --repo cache at {}: {error}",
+                root.display()
+            ),
             "set XDG_CACHE_HOME to a writable directory",
         )
     })?;
