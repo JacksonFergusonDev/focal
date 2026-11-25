@@ -14,6 +14,7 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 use ureq::config::RedirectAuthHeaders;
 
+pub(crate) mod call;
 mod download;
 
 /// Default per-request timeout.
