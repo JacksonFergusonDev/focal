@@ -2,6 +2,14 @@
 name = "focal"
 version = "0.3.0"
 edition = "2024"
+description = "Extract clean, token-efficient codebase context, diffs, and CI logs for LLM workflows."
+readme = "README.md"
+license = "MIT"
+authors = ["Jackson Ferguson <jackson.ferguson0@gmail.com>"]
+repository = "https://github.com/JacksonFergusonDev/focal"
+homepage = "https://github.com/JacksonFergusonDev/focal"
+keywords = ["cli", "llm", "context", "git", "github"]
+categories = ["command-line-utilities", "development-tools"]
 publish = false
 
 [dependencies]
@@ -22,6 +30,9 @@ nucleo-matcher = "0.3"
 zip = { version = "9.8.2", default-features = false, features = ["deflate"] }
 clap_complete = "4.6.12"
 sha2 = "0.11.1"
+# Build OpenSSL (used by git2's HTTPS and SSH transports) from source and link it
+# statically, so release binaries and manylinux wheels carry no system libssl dependency.
+openssl-sys = { version = "0.9", features = ["vendored"] }
 signal-hook = "0.3"
 
 [dev-dependencies]
