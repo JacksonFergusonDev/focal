@@ -296,6 +296,17 @@ just install
 
 *Note: The `just install` pipeline resolves a localized Python environment and symlinks the entrypoint binary into `~/.local/bin`. Ensure this directory is prioritized in your system `$PATH`.*
 
+### Rust Preview
+
+Focal is being rewritten as a single Rust executable that needs none of the external tools listed under [Dependencies & Toolchain](#️-dependencies--toolchain). It implements all 13 commands and runs side by side with the installed `focal`, which stays the default until the migration completes. Building it requires a [Rust toolchain](https://rustup.rs):
+
+```bash
+just rust-install   # installs ~/.local/bin/focal-rs
+focal-rs files      # same commands and flags as focal
+```
+
+The GitHub commands read a token from `GH_TOKEN` or `GITHUB_TOKEN`, or from `gh auth token` when you are signed in to GitHub CLI. `focal-rs completions bash` and `focal-rs completions zsh` print completion scripts for the `focal` command name. See [RUST_MIGRATION.md](RUST_MIGRATION.md) for the migration plan, current status, and the intentional differences from the installed version.
+
 ---
 
 ### Shell Autocompletion
