@@ -10,7 +10,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 CLI = Path(os.environ.get("FOCAL_TEST_BIN", ROOT / "bin/focal")).resolve()
 LEGACY = "FOCAL_TEST_BIN" not in os.environ
-FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURES = ROOT / "tests/fixtures"
 
 
 def build_pdf(pages: list[str | None]) -> bytes:
