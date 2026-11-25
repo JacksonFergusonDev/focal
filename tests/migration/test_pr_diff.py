@@ -89,6 +89,37 @@ def test_explicit_url_and_empty_body(github, github_checkout, env, focal):
     assert result.stdout.decode() == expected(12, "Docs", "*No description provided.*")
 
 
+@pytest.mark.parametrize("where", ["unrelated checkout", "outside any repository"])
+def test_url_for_another_repository(
+    github, github_checkout, tmp_path, env, focal, where
+):
+    other = "/repos/other/lib/pulls/42"
+    github.add(
+        other,
+        {
+            **pull(42, "Upstream fix"),
+            "html_url": "https://github.com/other/lib/pull/42",
+        },
+    )
+    github.add(other, raw=PATCH.encode())
+    cwd = github_checkout if where == "unrelated checkout" else tmp_path
+    result = focal(cwd, env, "pr-diff", "https://github.com/other/lib/pull/42/files")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.decode().startswith("<context>\n# PR #42: Upstream fix\n")
+    assert [r.path for r in github.requests] == [other, other]
+
+
+def test_branch_name_containing_pull_is_not_a_url(github, github_checkout, env, focal):
+    github.add(
+        f"{PULLS}?head=octo:release/pull/3&state=all&per_page=100",
+        [pull(9, "Release")],
+    )
+    serve_pull(github, 9, "Release")
+    result = focal(github_checkout, env, "pr-diff", "release/pull/3")
+    assert result.returncode == 0, result.stderr
+    assert "# PR #9: Release" in result.stdout.decode()
+
+
 def test_explicit_branch_name(github, github_checkout, env, focal):
     github.add(
         f"{PULLS}?head=octo:feature/login&state=all&per_page=100",

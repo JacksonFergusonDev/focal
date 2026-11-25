@@ -9,6 +9,9 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
+/// Upper bound on `Link` pages followed for one listing, guarding against a cycle.
+const MAX_PAGES: usize = 100;
+
 use super::limit::general;
 use super::notes::Pr;
 
@@ -220,7 +223,18 @@ impl GitHub {
     pub fn get_pages(&self, path: &str, notes: &mut Vec<String>) -> Result<Vec<Value>, Fetch> {
         let mut items = Vec::new();
         let mut next = Some(path.to_owned());
+        let mut pages = 0;
         while let Some(url) = next.take() {
+            pages += 1;
+            if pages > MAX_PAGES {
+                let message = format!(
+                    "GitHub pagination exceeded {MAX_PAGES} pages: {}",
+                    operation(&url, false)
+                );
+                eprintln!("warning: {message}");
+                notes.push(format!("WARNING: {message}"));
+                return Err(Fetch::Failed);
+            }
             let (fetch, link) = self.exchange(&url, None, notes);
             let page = match fetch {
                 Fetch::Ok(value) => value,

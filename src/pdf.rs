@@ -3,8 +3,10 @@
 
 use pdf_extract::encryption::DecryptionError;
 use pdf_extract::{Document, Error, OutputError, PlainTextOutput, output_doc_page};
+use std::cell::Cell;
 use std::panic::{self, AssertUnwindSafe};
 use std::path::Path;
+use std::sync::Once;
 
 const MAX_PAGES: usize = 50;
 const MAX_OUTPUT_CHARS: usize = 50_000;
@@ -74,12 +76,32 @@ fn classify_output(error: &OutputError) -> Failure {
     }
 }
 
+thread_local! {
+    /// Set while this thread runs PDF parsing whose panics are expected and reported.
+    static QUIET: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Installs, once per process, a panic hook that stays silent for panics inside [`guarded`]
+/// and defers to the default hook otherwise. Swapping hooks per call would race when the
+/// picker's preview worker and the main thread parse PDFs at the same time.
+fn install_quiet_hook() {
+    static INSTALL: Once = Once::new();
+    INSTALL.call_once(|| {
+        let default = panic::take_hook();
+        panic::set_hook(Box::new(move |info| {
+            if !QUIET.with(Cell::get) {
+                default(info);
+            }
+        }));
+    });
+}
+
 /// Runs `f`, converting a panic into `Failure::Crashed` without printing the panic message.
 fn guarded<T>(f: impl FnOnce() -> Result<T, Failure>) -> Result<T, Failure> {
-    let hook = panic::take_hook();
-    panic::set_hook(Box::new(|_| {}));
+    install_quiet_hook();
+    let outer = QUIET.with(|quiet| quiet.replace(true));
     let result = panic::catch_unwind(AssertUnwindSafe(f));
-    panic::set_hook(hook);
+    QUIET.with(|quiet| quiet.set(outer));
     result.unwrap_or(Err(Failure::Crashed))
 }
 
@@ -193,6 +215,21 @@ pub fn render(path: &Path, bytes: &[u8]) -> (String, bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn guarded_panics_become_crashes_on_any_thread() {
+        let workers: Vec<_> = (0..8)
+            .map(|_| {
+                std::thread::spawn(|| {
+                    (0..50)
+                        .map(|_| guarded::<()>(|| panic!("expected test panic")))
+                        .all(|result| result == Err(Failure::Crashed))
+                })
+            })
+            .collect();
+        assert!(workers.into_iter().all(|worker| worker.join().unwrap()));
+        assert_eq!(guarded(|| Ok(3)), Ok(3));
+    }
 
     #[test]
     fn ligatures_become_letters() {

@@ -97,18 +97,27 @@ fn env_token(names: &[&str]) -> Option<String> {
         .find(|value| !value.is_empty())
 }
 
-/// Finds a token for `host`: environment variables first, then `gh auth token`.
-pub fn token(host: &str) -> io::Result<String> {
-    let names: &[&str] = if host == "github.com" {
+/// Whether `host` is served by github.com's own token namespace (github.com and GitHub
+/// Enterprise Cloud's `*.ghe.com` data-residency hosts), as GitHub CLI treats them.
+fn is_github_cloud(host: &str) -> bool {
+    host == "github.com" || host.ends_with(".ghe.com")
+}
+
+/// Environment variables that may hold a token for `host`. `GH_TOKEN`/`GITHUB_TOKEN` are
+/// never offered to other hosts, so a github.com token cannot leak to a server named by a
+/// checkout's `origin` or by `--repo`.
+fn token_vars(host: &str) -> &'static [&'static str] {
+    if is_github_cloud(host) {
         &["GH_TOKEN", "GITHUB_TOKEN"]
     } else {
-        &[
-            "GH_ENTERPRISE_TOKEN",
-            "GITHUB_ENTERPRISE_TOKEN",
-            "GH_TOKEN",
-            "GITHUB_TOKEN",
-        ]
-    };
+        &["GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"]
+    }
+}
+
+/// Finds a token for `host`: host-appropriate environment variables first, then
+/// `gh auth token --hostname`, which GitHub CLI scopes per host.
+pub fn token(host: &str) -> io::Result<String> {
+    let names = token_vars(host);
     if let Some(token) = env_token(names) {
         return Ok(token);
     }
@@ -122,10 +131,14 @@ pub fn token(host: &str) -> io::Result<String> {
         .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
         .filter(|token| !token.is_empty());
     from_gh.ok_or_else(|| {
-        crate::output::fail(
-            format!("no GitHub credentials found for {host}"),
-            "set GH_TOKEN or GITHUB_TOKEN, or sign in with 'gh auth login'",
-        )
+        let hint = if is_github_cloud(host) {
+            "set GH_TOKEN or GITHUB_TOKEN, or sign in with 'gh auth login'".to_owned()
+        } else {
+            format!(
+                "set GH_ENTERPRISE_TOKEN for this host, or sign in with 'gh auth login --hostname {host}'"
+            )
+        };
+        crate::output::fail(format!("no GitHub credentials found for {host}"), &hint)
     })
 }
 
@@ -389,6 +402,24 @@ mod tests {
             ("ghe.example.com", "team/tool")
         );
         assert_eq!(parse_remote("/local/path/repo"), None);
+    }
+
+    #[test]
+    fn github_tokens_stay_on_github_hosts() {
+        assert_eq!(token_vars("github.com"), ["GH_TOKEN", "GITHUB_TOKEN"]);
+        assert_eq!(token_vars("acme.ghe.com"), ["GH_TOKEN", "GITHUB_TOKEN"]);
+        for host in [
+            "gitlab.com",
+            "ghe.example.com",
+            "attacker.example",
+            "github.com.evil.test",
+        ] {
+            assert_eq!(
+                token_vars(host),
+                ["GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"],
+                "{host}"
+            );
+        }
     }
 
     #[test]

@@ -117,7 +117,10 @@ pub fn remove_scratch(root: &Path, entry: &str) {
     let Ok(dir) = fs::read_dir(root) else { return };
     for item in dir.flatten() {
         let name = item.file_name();
-        if scratch_owner(&name.to_string_lossy()) == Some(entry) {
+        let name = name.to_string_lossy();
+        // A repository can be named like a scratch directory; a checkout in use under
+        // that name holds its own use lock, so it cannot be claimed and is kept.
+        if scratch_owner(&name) == Some(entry) && claim(root, &name).is_some() {
             let _ = fs::remove_dir_all(item.path());
         }
     }
@@ -190,7 +193,9 @@ pub fn cleanup(root: &Path, active: &str) {
         if let Some(owner) = scratch_owner(&name) {
             // Leftovers of a killed run; a live clone holds its entry's update lock.
             if owner != active
+                && name != active
                 && let Some(_guard) = claim(root, owner)
+                && let Some(_own) = claim(root, &name)
             {
                 let _ = fs::remove_dir_all(root.join(&name));
             }

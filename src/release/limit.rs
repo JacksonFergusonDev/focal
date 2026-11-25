@@ -62,6 +62,21 @@ fn before_last_line(text: &str) -> &str {
     text.rsplit_once('\n').map_or(text, |(head, _)| head)
 }
 
+/// `text` cut to about `limit` characters at a line boundary, with any fence left open by
+/// the cut closed and `notice` appended. Text within the limit is returned unchanged.
+fn clip(text: &str, limit: usize, notice: &str) -> String {
+    if chars(text) <= limit {
+        return text.to_owned();
+    }
+    let mut out = before_last_line(prefix(text, limit.saturating_sub(100))).to_owned();
+    if let Some(fence) = open_fence(&out) {
+        out.push('\n');
+        out.push_str(&fence);
+    }
+    out.push_str(notice);
+    out
+}
+
 /// The fence left open at the end of `text`, honoring nested longer fences.
 pub fn open_fence(text: &str) -> Option<String> {
     let mut open: Option<String> = None;
@@ -96,7 +111,7 @@ pub fn limit(content: &str, max_tokens: usize) -> String {
         return content.to_owned();
     }
     let marker = "\n## Completeness Notes\n";
-    let (mut body, separator, mut notes) = match content.rfind(marker) {
+    let (mut body, separator, notes) = match content.rfind(marker) {
         Some(at) => (
             content[..at].to_owned(),
             true,
@@ -104,44 +119,57 @@ pub fn limit(content: &str, max_tokens: usize) -> String {
         ),
         None => (content.to_owned(), false, String::new()),
     };
-    // Keep the aggregate impact even when detailed PRs consume the budget.
-    let impact_start = body.find("\n## Release Impact\n");
+    // Keep the aggregate impact even when detailed PRs consume the budget. The real section
+    // follows every PR description, so the last match is the right one.
+    let impact_start = body.rfind("\n## Release Impact\n");
+    let mut impact = String::new();
     if let Some(start) = impact_start {
         let end = body[start + 1..]
             .find("\n## ")
             .map_or(body.len(), |at| start + 1 + at);
-        let mut impact = body[start..end].to_owned();
+        impact = body[start..end].to_owned();
         if chars(&impact) > max_chars / 5 {
             let lines: Vec<&str> = impact.lines().collect();
-            let tail = &lines[lines.len().saturating_sub(2)..];
+            // Never more than the lines before the two-line tail (summary and closing
+            // fence), so the tail is not repeated.
+            let keep = lines.len().saturating_sub(2).min(40);
+            let tail = &lines[lines.len().saturating_sub(2).max(keep)..];
             impact = format!(
                 "{}\n...[diffstat paths abbreviated]\n{}\n",
-                lines[..lines.len().min(40)].join("\n"),
+                lines[..keep].join("\n"),
                 tail.join("\n")
+            );
+            if let Some(fence) = open_fence(&impact) {
+                impact.push_str(&fence);
+                impact.push('\n');
+            }
+            impact = clip(
+                &impact,
+                max_chars / 5,
+                "\n...[release impact abbreviated]\n",
             );
         }
         body = format!("{}{}", &body[..start], &body[end..]);
-        notes = format!("{impact}{marker}{notes}");
     }
     let mut warning = format!(
         "\n\n## Output Limit\n\n* WARNING: output exceeded the approximate {}-token budget. Some release detail is omitted; this payload is incomplete. Rerun with a narrower range or increase --max-tokens; 0 disables this limit.\n",
         thousands(max_tokens)
     );
-    let mut footer = if impact_start.is_some() {
-        notes
-    } else if separator {
-        format!("{marker}{notes}")
+    // The notes keep their own share of the footer budget, so a long impact section can
+    // never crowd them out, and large numbers of diagnostics cannot defeat the bound.
+    let notes_limit = (max_chars / 3)
+        .saturating_sub(chars(&impact))
+        .max(max_chars / 10);
+    let notes = if separator {
+        clip(
+            &format!("{marker}{notes}"),
+            notes_limit,
+            "\n* Additional diagnostic detail omitted by output limit.\n",
+        )
     } else {
         String::new()
     };
-    // Large numbers of diagnostics must not defeat the output bound either.
-    let footer_limit = max_chars / 3;
-    if chars(&footer) > footer_limit {
-        footer = format!(
-            "{}\n* Additional diagnostic detail omitted by output limit.\n",
-            before_last_line(prefix(&footer, footer_limit.saturating_sub(100)))
-        );
-    }
+    let footer = format!("{impact}{notes}");
     let allowance = max_chars.saturating_sub(chars(&warning) + chars(&footer) + 150);
     let mut clipped = before_last_line(prefix(&body, allowance)).to_owned();
     // Close an open fenced code block when a requested diff or description is cut.
@@ -164,6 +192,48 @@ pub fn limit(content: &str, max_tokens: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn report(impact_lines: usize, width: usize, notes: usize) -> String {
+        let detail = "x".repeat(4_000);
+        let stat: String = (0..impact_lines)
+            .map(|n| format!(" path/{n:03}/{} | 2 +-\n", "p".repeat(width)))
+            .collect();
+        let notes: String = (0..notes).map(|n| format!("* note {n}\n")).collect();
+        format!(
+            "# Release Context\n\n## Pull Requests\n\n{detail}\n\n## Release Impact\n\n```text\n{stat} {impact_lines} files changed\n```\n\n## Completeness Notes\n\n{notes}"
+        )
+    }
+
+    #[test]
+    fn limited_output_keeps_fences_balanced_and_notes_present() {
+        // A long impact (many lines) and a short but wide impact (few, long lines).
+        for (lines, width) in [(60, 80), (12, 400), (35, 120)] {
+            let out = limit(&report(lines, width, 5), 1_000);
+            assert_eq!(
+                open_fence(&out),
+                None,
+                "{lines} lines of width {width}:\n{out}"
+            );
+            assert!(out.contains("## Release Impact"), "{lines}x{width}");
+            assert!(
+                out.contains("## Completeness Notes\n\n* note 0"),
+                "{lines}x{width}"
+            );
+            assert!(out.chars().count() <= 4_000 + 400, "{lines}x{width}");
+        }
+    }
+
+    #[test]
+    fn heading_inside_a_pr_description_is_not_moved() {
+        let content = format!(
+            "# Release Context\n\n## Pull Requests\n\nBody quoting\n## Release Impact\n\nfrom a PR\n{}\n\n## Release Impact\n\nreal stat\n\n## Completeness Notes\n\n* done\n",
+            "y".repeat(8_000)
+        );
+        let out = limit(&content, 500);
+        let footer = out.split("## Output Limit").nth(1).unwrap();
+        assert!(footer.contains("real stat"));
+        assert!(!footer.contains("from a PR"));
+    }
 
     #[test]
     fn formats_numbers_like_python() {

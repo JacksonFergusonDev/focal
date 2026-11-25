@@ -3,7 +3,7 @@
 //! Owned by migration track A. Reference: libexec/pr-diff and focal/gh_pr_diff.py.
 
 use crate::file::fenced;
-use crate::github::{ApiError, Client};
+use crate::github::{self, ApiError, Client, Repo};
 use crate::output::{deliver, fail, header};
 use crate::picker::{self, Item, Options, Outcome};
 use serde_json::Value;
@@ -32,15 +32,22 @@ fn encode(value: &str) -> String {
         .collect()
 }
 
-/// A number from `123`, `#123`, or a pull request URL (`…/pull/123`).
+/// A number from `123` or `#123`.
 fn parse_number(id: &str) -> Option<u64> {
     let id = id.trim();
-    let digits = id.strip_prefix('#').unwrap_or(id);
-    if let Ok(number) = digits.parse() {
-        return Some(number);
+    id.strip_prefix('#').unwrap_or(id).parse().ok()
+}
+
+/// The repository and number named by a pull request URL
+/// (`https://host/owner/name/pull/123[/files…]`).
+fn parse_url(id: &str) -> Option<(Repo, u64)> {
+    let id = id.trim();
+    if !(id.starts_with("https://") || id.starts_with("http://")) {
+        return None;
     }
-    let (_, rest) = id.split_once("/pull/")?;
-    rest.split(['/', '?', '#']).next()?.parse().ok()
+    let (repo, rest) = id.split_once("/pull/")?;
+    let number = rest.split(['/', '?', '#']).next()?.parse().ok()?;
+    Some((github::parse_remote(repo)?, number))
 }
 
 /// The pull request whose head is `branch` in this repository, preferring an open one.
@@ -195,7 +202,18 @@ fn render(client: &Client, number: u64) -> Result<String, ApiError> {
     Ok(parts.join("\n"))
 }
 
+/// A client for the repository a pull request URL names, which may differ from `origin`
+/// (as with `gh pr view <url>`).
+fn client_for(repo: Repo) -> io::Result<Client> {
+    let token = github::token(&repo.host)?;
+    Ok(Client::new(repo, token, github::DEFAULT_TIMEOUT))
+}
+
 pub fn run(args: Args) -> io::Result<()> {
+    if let Some((repo, number)) = args.pr.as_deref().and_then(parse_url) {
+        let client = client_for(repo)?;
+        return copy(&client, number);
+    }
     let client = Client::for_current_repo()?;
     let number = match args.pr.as_deref() {
         Some(id) => resolve(&client, id)?,
@@ -211,7 +229,11 @@ pub fn run(args: Args) -> io::Result<()> {
             }
         }
     };
-    let formatted = render(&client, number)?;
+    copy(&client, number)
+}
+
+fn copy(client: &Client, number: u64) -> io::Result<()> {
+    let formatted = render(client, number)?;
     let mut payload = header()?;
     payload.push_str(&formatted);
     deliver(
@@ -228,11 +250,12 @@ mod tests {
     fn parses_identifiers() {
         assert_eq!(parse_number("42"), Some(42));
         assert_eq!(parse_number("#42"), Some(42));
-        assert_eq!(
-            parse_number("https://github.com/octo/widget/pull/42/files"),
-            Some(42)
-        );
         assert_eq!(parse_number("feature/login"), None);
+        let (repo, number) = parse_url("https://github.com/other/lib/pull/42/files").unwrap();
+        assert_eq!((repo.slug().as_str(), number), ("other/lib", 42));
+        // Branch names that merely contain /pull/ are not URLs.
+        assert_eq!(parse_url("release/pull/3"), None);
+        assert_eq!(parse_number("release/pull/3"), None);
     }
 
     #[test]

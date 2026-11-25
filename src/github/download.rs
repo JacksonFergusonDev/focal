@@ -5,15 +5,26 @@
 //! a redirect, so the token stays with the API host.
 
 use super::{ApiError, Client, api_message};
+use std::time::Duration;
+
+/// Upper bound on one archive download, including redirects and the body.
+const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 impl Client {
     /// GETs a response body as bytes, following redirects without credentials. Statuses
     /// outside 2xx become an [`ApiError`] carrying the final status.
     pub fn download(&self, path_or_url: &str, limit: u64) -> Result<Vec<u8>, ApiError> {
         let url = self.url(path_or_url);
+        // The shared agent's 20-second global timeout would cut off large archives on slow
+        // links, so a download gets connect and first-byte limits plus a generous total.
         let mut response = self
             .agent
             .get(&url)
+            .config()
+            .timeout_global(Some(DOWNLOAD_TIMEOUT))
+            .timeout_connect(Some(Duration::from_secs(20)))
+            .timeout_recv_response(Some(Duration::from_secs(60)))
+            .build()
             .header("Accept", "application/vnd.github+json")
             .header("Authorization", &format!("Bearer {}", self.token))
             .header("X-GitHub-Api-Version", "2022-11-28")

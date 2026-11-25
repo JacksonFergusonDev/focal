@@ -23,6 +23,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const LIST_LIMIT: usize = 30;
 /// Upper bound on a downloaded log archive or job log.
 const DOWNLOAD_LIMIT: u64 = 1024 * 1024 * 1024;
+/// Upper bound on decompressed failed-step logs, so a highly compressible archive cannot
+/// exhaust memory.
+const MAX_LOG_BYTES: u64 = 256 * 1024 * 1024;
 /// GitHub CLI's cap on per-job log requests when the archive lacks a job's log.
 const MAX_JOB_LOG_REQUESTS: usize = 25;
 
@@ -351,13 +354,26 @@ fn failure_context(client: &Client, run: &Run, jobs: &[Job]) -> io::Result<Strin
         ));
     }
     let mut raw = String::new();
+    let mut budget = MAX_LOG_BYTES;
     for segment in segments {
+        if budget == 0 {
+            eprintln!(
+                "warning: failed-step logs exceed {} MiB; later steps were omitted",
+                MAX_LOG_BYTES / (1024 * 1024)
+            );
+            break;
+        }
         let log = match segment.source {
             Source::Entry(index) => {
                 let mut bytes = Vec::new();
                 archive
                     .by_index(index)
-                    .and_then(|mut entry| entry.read_to_end(&mut bytes).map_err(Into::into))
+                    .and_then(|entry| {
+                        entry
+                            .take(budget)
+                            .read_to_end(&mut bytes)
+                            .map_err(Into::into)
+                    })
                     .map_err(|error| {
                         output::fail(
                             format!(
@@ -376,6 +392,7 @@ fn failure_context(client: &Client, run: &Run, jobs: &[Job]) -> io::Result<Strin
                 )
                 .map_err(|error| expired(run.id, error))?,
         };
+        budget = budget.saturating_sub(log.len() as u64);
         logs::gh_lines(&mut raw, &segment.job, &segment.step, &log);
     }
     let filtered = logs::filter_logs(raw.trim());
