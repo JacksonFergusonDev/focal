@@ -105,6 +105,51 @@ fn guarded<T>(f: impl FnOnce() -> Result<T, Failure>) -> Result<T, Failure> {
     result.unwrap_or(Err(Failure::Crashed))
 }
 
+/// Rewrites the `'` and `"` text operators, which pdf-extract ignores, into the equivalent
+/// `T*`, `Tw`, `Tc`, and `Tj` sequence. Ghostscript writes every line after the first with
+/// `'`, so without this most of such a document's text is lost. Pages that cannot be
+/// decoded are left for pdf-extract to report.
+fn expand_quote_operators(doc: &mut Document) {
+    use pdf_extract::content::{Content, Operation};
+    for page in doc.get_pages().into_values() {
+        let Ok(bytes) = doc.get_page_content(page) else {
+            continue;
+        };
+        if !bytes.iter().any(|&byte| byte == b'\'' || byte == b'"') {
+            continue;
+        }
+        let Ok(content) = Content::decode(&bytes) else {
+            continue;
+        };
+        if !content
+            .operations
+            .iter()
+            .any(|op| op.operator == "'" || op.operator == "\"")
+        {
+            continue;
+        }
+        let mut operations = Vec::with_capacity(content.operations.len());
+        for op in content.operations {
+            match (op.operator.as_str(), op.operands.as_slice()) {
+                ("'", [text]) => {
+                    operations.push(Operation::new("T*", vec![]));
+                    operations.push(Operation::new("Tj", vec![text.clone()]));
+                }
+                ("\"", [word, character, text]) => {
+                    operations.push(Operation::new("Tw", vec![word.clone()]));
+                    operations.push(Operation::new("Tc", vec![character.clone()]));
+                    operations.push(Operation::new("T*", vec![]));
+                    operations.push(Operation::new("Tj", vec![text.clone()]));
+                }
+                _ => operations.push(op),
+            }
+        }
+        if let Ok(encoded) = (Content { operations }).encode() {
+            let _ = doc.change_page_content(page, encoded);
+        }
+    }
+}
+
 /// Replaces typographic ligatures, which pdf-extract leaves in place, with plain letters.
 fn unligature(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
@@ -135,6 +180,7 @@ pub fn extract(bytes: &[u8]) -> Result<String, Failure> {
         if encrypted {
             doc.decrypt("").map_err(|e| classify(&e))?;
         }
+        expand_quote_operators(&mut doc);
         let page_numbers: Vec<u32> = doc.get_pages().into_keys().collect();
         let mut pages = Vec::new();
         let mut first_failure = None;
@@ -232,6 +278,45 @@ mod tests {
             .collect();
         assert!(workers.into_iter().all(|worker| worker.join().unwrap()));
         assert_eq!(guarded(|| Ok(3)), Ok(3));
+    }
+
+    /// A one-page PDF whose text uses `Tj`, `'`, and `"`, as Ghostscript writes it.
+    fn quoted_lines_pdf() -> Vec<u8> {
+        use pdf_extract::{Object, Stream, dictionary};
+        let mut doc = Document::with_version("1.5");
+        let pages = doc.new_object_id();
+        let font = doc.add_object(dictionary! {
+            "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica",
+        });
+        let text =
+            b"BT /F1 12 Tf 14 TL 72 700 Td (first line) Tj (second line) ' 0 0 (third line) \" ET";
+        let content = doc.add_object(Stream::new(dictionary! {}, text.to_vec()));
+        let page = doc.add_object(dictionary! {
+            "Type" => "Page",
+            "Parent" => pages,
+            "Contents" => content,
+            "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
+            "Resources" => dictionary! { "Font" => dictionary! { "F1" => font } },
+        });
+        doc.objects.insert(
+            pages,
+            Object::Dictionary(dictionary! {
+                "Type" => "Pages", "Kids" => vec![page.into()], "Count" => 1,
+            }),
+        );
+        let catalog = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages });
+        doc.trailer.set("Root", catalog);
+        let mut bytes = Vec::new();
+        doc.save_to(&mut bytes).unwrap();
+        bytes
+    }
+
+    #[test]
+    fn quote_operators_keep_their_lines() {
+        let text = extract(&quoted_lines_pdf()).unwrap();
+        for line in ["first line", "second line", "third line"] {
+            assert!(text.contains(line), "{line} missing from {text:?}");
+        }
     }
 
     #[test]

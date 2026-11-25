@@ -159,6 +159,24 @@ def test_all_lists_each_patch_once(repo, env):
     assert patch.count("+++ b/new.txt") == 1
 
 
+def test_stat_bars_scale_like_git(repo, env):
+    (repo / "big.txt").write_text("".join(f"{n}\n" for n in range(200)))
+    (repo / "new.txt").write_text("".join(f"{n}\n" for n in range(20)))
+    (repo / "staged.py").unlink()
+    git(repo, env, "add", "-A")
+    result = run(repo, env, "--staged")
+    assert result.returncode == 0, result.stderr
+    rows = {
+        line.split("|")[0].strip(): line.split("|")[1]
+        for line in section(result.stdout, "Summary").splitlines()
+        if "|" in line
+    }
+    assert "-" not in rows["new.txt"]
+    assert "+" in rows["new.txt"]
+    assert "+" not in rows["staged.py"]
+    assert "-" in rows["staged.py"]
+
+
 @pytest.fixture
 def conflicted(repo, env):
     git(repo, env, "checkout", "-qb", "other")

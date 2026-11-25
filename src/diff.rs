@@ -2,10 +2,7 @@
 
 use crate::file::{self, Noise};
 use crate::git;
-use git2::{
-    Delta, Diff, DiffDelta, DiffFindOptions, DiffFormat, DiffOptions, DiffStatsFormat, Repository,
-    Tree,
-};
+use git2::{Delta, Diff, DiffDelta, DiffFindOptions, DiffFormat, DiffOptions, Repository, Tree};
 use std::collections::HashSet;
 use std::io;
 use std::path::{Component, Path, PathBuf};
@@ -23,10 +20,137 @@ pub fn patch(diff: &Diff) -> Result<String, git2::Error> {
     Ok(String::from_utf8_lossy(&out).into_owned())
 }
 
-/// Renders a `git diff --stat` style summary for an 80-column display.
+/// Git's `scale_linear`: maps a nonzero count onto 1..=width.
+fn scale(count: usize, width: usize, max: usize) -> usize {
+    if count == 0 {
+        0
+    } else {
+        1 + count * (width - 1) / max
+    }
+}
+
+/// Renders a `git diff --stat` style summary for an 80-column display. libgit2's renderer
+/// can draw a `-` for a file that only gained lines, so bars are scaled as Git scales them.
 pub fn stat(diff: &Diff) -> Result<String, git2::Error> {
-    let buf = diff.stats()?.to_buf(DiffStatsFormat::FULL, 80)?;
-    Ok(String::from_utf8_lossy(&buf).into_owned())
+    struct Row {
+        name: String,
+        added: usize,
+        deleted: usize,
+        binary: Option<(u64, u64)>,
+    }
+    let mut rows = Vec::new();
+    for index in 0..diff.deltas().len() {
+        let delta = diff.get_delta(index).expect("index within deltas");
+        let path = |file: git2::DiffFile| {
+            file.path()
+                .map(|path| path.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        };
+        let (old, new) = (path(delta.old_file()), path(delta.new_file()));
+        let name = if matches!(delta.status(), Delta::Renamed | Delta::Copied) && old != new {
+            format!("{old} => {new}")
+        } else if new.is_empty() {
+            old
+        } else {
+            new
+        };
+        let patch = git2::Patch::from_diff(diff, index)?;
+        let binary = delta.flags().is_binary()
+            || patch
+                .as_ref()
+                .is_some_and(|patch| patch.delta().flags().is_binary());
+        let (added, deleted) = match &patch {
+            Some(patch) if !binary => {
+                let (_, added, deleted) = patch.line_stats()?;
+                (added, deleted)
+            }
+            _ => (0, 0),
+        };
+        rows.push(Row {
+            name,
+            added,
+            deleted,
+            binary: binary.then(|| (delta.old_file().size(), delta.new_file().size())),
+        });
+    }
+    if rows.is_empty() {
+        return Ok(String::new());
+    }
+    let name_width = rows
+        .iter()
+        .map(|row| row.name.chars().count())
+        .max()
+        .unwrap_or(0);
+    let max_change = rows
+        .iter()
+        .map(|row| row.added + row.deleted)
+        .max()
+        .unwrap_or(0);
+    let number_width = if rows.iter().any(|row| row.binary.is_some()) {
+        max_change.to_string().len().max(3)
+    } else {
+        max_change.to_string().len()
+    };
+    // " name | count graph" within 80 columns, as Git does without a terminal width.
+    let graph_width = 80usize
+        .saturating_sub(name_width + number_width + 4)
+        .clamp(6, 80);
+    let mut out = String::new();
+    let (mut insertions, mut deletions) = (0, 0);
+    for row in &rows {
+        out.push_str(&format!(" {:<name_width$} | ", row.name));
+        if let Some((old, new)) = row.binary {
+            out.push_str(&format!("{:>number_width$} {old} -> {new} bytes\n", "Bin"));
+            continue;
+        }
+        insertions += row.added;
+        deletions += row.deleted;
+        let (mut plus, mut minus) = (row.added, row.deleted);
+        if max_change > graph_width {
+            let total = scale(plus + minus, graph_width, max_change);
+            let total = if total < 2 && plus > 0 && minus > 0 {
+                2
+            } else {
+                total
+            };
+            if plus < minus {
+                plus = scale(plus, graph_width, max_change);
+                minus = total - plus;
+            } else {
+                minus = scale(minus, graph_width, max_change);
+                plus = total - minus;
+            }
+        }
+        out.push_str(&format!(
+            "{:>number_width$} {}{}",
+            row.added + row.deleted,
+            "+".repeat(plus),
+            "-".repeat(minus)
+        ));
+        out.truncate(out.trim_end().len());
+        out.push('\n');
+    }
+    let plural = |count: usize, one: &str, many: &str| {
+        format!("{count} {}", if count == 1 { one } else { many })
+    };
+    out.push_str(&format!(
+        " {}",
+        plural(rows.len(), "file changed", "files changed")
+    ));
+    if insertions > 0 || deletions == 0 {
+        out.push_str(&format!(
+            ", {}(+)",
+            plural(insertions, "insertion", "insertions")
+        ));
+    }
+    if deletions > 0 || insertions == 0 {
+        out.push_str(&format!(
+            ", {}(-)",
+            plural(deletions, "deletion", "deletions")
+        ));
+    }
+    out.push('\n');
+    Ok(out)
 }
 
 pub fn options() -> DiffOptions {

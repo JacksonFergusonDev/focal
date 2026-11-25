@@ -29,7 +29,7 @@ arboard = { version = "3", default-features = false }
 
 # Smaller distributed binary. Keep panic = "unwind": the picker restores the terminal
 # from a Drop guard while a panic unwinds. opt-level stays at 3: "z" is about 30% smaller
-# but has not been measured on large PDF, web, or search inputs.
+# but made PDF, web, and large-text extraction 1.5-2.4x slower in benchmarks.
 [profile.release]
 strip = true
 lto = true

@@ -28,7 +28,7 @@ Previews render on a worker thread that skips to the newest request, so a slow P
 
 `diff` and `wip-context` render patches, stats, and topology through `git2`. `diff` keeps the default unstaged, `--staged/--cached`, `-a/--all` (with untracked patches and unborn HEAD), and `--thick` modes, the Status, Summary, and Diff sections, and the warnings about excluded staged, unstaged, and untracked changes. Without explicit paths it excludes noise files before rename detection, so a kept file never pairs with an excluded one. Explicit pathspecs resolve from the invocation directory and override the exclusions. `wip-context` resolves an explicit base, the remote default branch, or main/master/develop (local or `origin/`), and keeps the uncommitted status, topology, net diffstat, root and `.github/` patch priority, the 30,000-character patch budget with closed fences, omitted-file metadata, and the no-divergence diagnostic.
 
-These two commands preserve Git's information rather than its exact bytes. Expected cosmetic differences: libgit2 pads `--stat` counts and scores rename similarity slightly differently, topology omits `git log`'s extra blank lines and rename scores (`R` instead of `R100`), and omitted-file types come from a built-in magic-byte check such as `PNG image data` instead of `file -b`. The shared tests assert on content, section order, and budgets for these commands.
+These two commands preserve Git's information rather than its exact bytes. Expected cosmetic differences: libgit2 scores rename similarity slightly differently, topology omits `git log`'s extra blank lines and rename scores (`R` instead of `R100`), and omitted-file types come from a built-in magic-byte check such as `PNG image data` instead of `file -b`. The shared tests assert on content, section order, and budgets for these commands.
 
 `issues` and `pr-diff` run on the shared GitHub REST client and the Rust picker, with no `gh`, `fzf`, `jq`, or `column` on PATH. Both resolve the repository and credentials before any other work, so missing credentials, a missing `origin`, and HTTP failures exit 1 with the client's diagnostic and hint.
 
@@ -93,9 +93,9 @@ None of these can be `xfail(LEGACY, strict=True)` tests, because the legacy comm
   | Default release | 14.0 MB | 67 s |
   | `strip` only | 11.2 MB | 93 s (contended) |
   | `strip`, thin LTO, 1 CGU | 10.2 MB | 85 s |
-  | **`strip`, fat LTO, 1 CGU (chosen)** | **9.3 MB** | 95–131 s |
+  | **`strip`, fat LTO, 1 CGU (chosen)** | **9.3 MB** (10.2 MB at `2d0d9e2`) | 95–131 s |
   | chosen + `opt-level = "s"` | 7.9 MB | 140 s |
-  | chosen + `opt-level = "z"` | 6.5 MB | 98 s |
+  | chosen + `opt-level = "z"` | 6.5 MB (7.1 MB at `c6b73be`) | 98 s |
   | chosen + `panic = "abort"` | 8.3 MB | 100 s |
 
   With `scripts/benchmark_migration.py` (100-file fixture, warm cache), `opt-level = "z"` was within 3% of `opt-level = 3` for `tree`, `files --all`, and `context --all`, and no slower on a regex search across the Cargo registry. It is a candidate for a further 2.8 MB, but large PDF, HTML, and Brotli inputs have not been measured, so this track keeps `opt-level = 3`. `panic = "abort"` would save only 1 MB and remove the picker's terminal-restore guarantee.
@@ -159,7 +159,7 @@ The shared suite marks each of these `xfail(strict=True)` against the legacy dis
 | `release-context --head does-not-exist` | `Git command failed: git rev-parse --verify … Error: fatal: Needed a single revision` | `unknown revision or not a commit: 'does-not-exist'` with a `git fetch --tags` hint (`test_unknown_revision`) |
 | Request diagnostics in Completeness Notes and on stderr | Name `gh` operations (`gh api repos/…`, `gh api graphql`, `gh repo view`, `gh release view`) and quote `gh` stderr | Name HTTP operations (`GET repos/…`, `POST graphql`) and quote the HTTP status and API message. Untestable against legacy, which needs `gh`; covered by `test_association_pages_are_followed_and_page_two_failures_stay_unresolved` and `test_graphql_errors_fall_back_to_rest_listings` |
 | Request scheduling | Serial `gh` processes; notes in chronological order; the release listing stops when a page has fewer than 100 items | Up to four requests in flight; per-job notes in job order followed by the stop reason; listings follow `Link` headers. The request count in the final note can differ by the extra short page legacy fetches. Untestable against legacy; covered by `test_output_order_is_independent_of_completion_order` and `test_deadline_expiry_midway_keeps_completed_results` |
-| Git-rendered text (approved: same information, different bytes) | `git diff --stat` columns, `git log --name-only` paths quoted under `core.quotePath` (`"caf\303\251.txt"`), `git diff` patch headers | libgit2 diffstat padding, raw UTF-8 paths, libgit2 patch headers with 7-character index abbreviations. Shared tests assert on paths and hunk content only |
+| Git-rendered text (approved: same information, different bytes) | `git diff --stat` columns, `git log --name-only` paths quoted under `core.quotePath` (`"caf\303\251.txt"`), `git diff` patch headers | Diffstat rows rendered in process with Git's column layout and bar scaling (renames as `old => new` rather than Git's `{old => new}` compaction), raw UTF-8 paths, libgit2 patch headers with 7-character index abbreviations. Shared tests assert on paths and hunk content only |
 | Tag choice among equally near tags | `git describe --tags --abbrev=0 --match …` | Fewest commits between tag and head (libgit2 ahead/behind), ties to the tag found first in commit-date order; on one commit an annotated tag beats a lightweight one, then newer tagger date, then refname order. Matches `git describe` on the fixtures; exotic ties are not cross-checked |
 | `release-context --max-tokens N` when the budget cuts the release impact | The impact is moved into a footer cut to a third of the budget, which can leave its `text` fence open and drop Completeness Notes; a PR description quoting `## Release Impact` is moved instead | The impact and the notes are clipped separately, every cut closes its fence, and the real section is moved (`limited_output_keeps_fences_balanced_and_notes_present`, `heading_inside_a_pr_description_is_not_moved`) |
 | Subcommand `-h`/`--help` | Hand-written `print_subcommand_help` text per command | clap-generated help listing every flag. `focal web help` still prints help |
@@ -179,6 +179,8 @@ The shared suite marks each of these `xfail(strict=True)` against the legacy dis
 | A picker killed by SIGTERM, SIGHUP, SIGINT, or SIGQUIT | fzf restores the terminal | Also restores raw mode and leaves the alternate screen before exiting with 128 + signal |
 | GitHub `Link` pages on another host | `gh` follows `Link` URLs | The client refuses absolute URLs outside the API origin rather than sending the token there; `get_all` also stops on a repeated page and warns at the 100-page cap |
 | HTTP 429 | `gh` reports the API message | Treated as a rate limit; `Retry-After` is named in the hint |
+| Omitted-file `Metadata:` in `files` and `context` | `file -b` descriptions such as `JSON data` | The omission category (`asset/noise`, `binary`) and the byte count |
+| PDF text drawn with the `'` and `"` operators (Ghostscript output) | Extracted by `pdftotext` | `pdf-extract` 0.10 ignores both, so they are rewritten into `T*` and `Tj` before extraction (`quote_operators_keep_their_lines`) |
 
 ### Open items
 
@@ -233,7 +235,21 @@ FOCAL_TEST_EMPTY_PATH=1 FOCAL_TEST_BIN=target/release/focal python -m pytest tes
 python scripts/benchmark_migration.py bin/focal target/release/focal --files 64 --samples 3
 ```
 
-The first warm-cache run on Apple Silicon macOS used 64 small Python modules in eight directories. Across three timed samples, median `files --all` time was 1.374 s for Bash and 0.025 s for Rust. Both emitted 3,997 bytes with equivalent file blocks. Median peak RSS reported by `wait4` was 12.8 MiB and 8.4 MiB respectively. Legacy baseline medians for `tree` and `context --all` on the same fixture shape were 0.113 s and 1.780 s. This fixture measures small-file overhead. Mixed document extraction and cold-cache timings remain open.
+Benchmarks at `c6b73be` on an Apple M3 (16 GiB, macOS 27.2.1), warm cache, seven samples, medians and peak RSS. Load from parallel builds was 2.3–9.6 during timed runs:
+
+| Case | Legacy | Rust | Peak RSS legacy / Rust |
+| --- | --- | --- | --- |
+| `tree` (64 files) | 0.094 s | 0.010 s | 8.8 / 11.3 MiB |
+| `files --all` (64 files) | 1.50 s | 0.011 s | 12.8 / 12.9 MiB |
+| `files --all` (2,000 files) | 43.8 s | 0.072 s | 13.2 / 13.3 MiB |
+| `context --all` (mixed repository with PDFs and notebooks) | 7.38 s | 0.362 s | 260 / 45 MiB |
+| `search` / `symbol` (medium corpus) | 0.131 / 0.534 s | 0.020 / 0.018 s | 10.4–14.8 / 13.8–14.2 MiB |
+| `diff -a` (285 files) | 0.222 s | 0.085 s | 10.8 / 13.1 MiB |
+| `wip-context` | 1.20 s | 0.034 s | 38.8 / 12.7 MiB |
+| `web` on stdin, 1.2 MB HTML | killed after 380 s (one run) | 0.047 s | ≥469 / 30 MiB |
+| `release-context minor` offline / `--diff` over 320 commits | 0.355 / 0.313 s | 0.031 / 0.087 s | 39 / 13–15 MiB |
+
+Rust was faster in every case; it uses 2–3 MiB more memory on the smallest ones. The legacy `web` time is spent in Bash's whitespace check on piped input. An approximate cold-cache run (fixtures and binaries on a freshly attached disk image) took 0.028 s for Rust `tree` and 0.391 s for `context --all`. `opt-level = "z"` saved 3.07 MB but made PDF, web, and large-text extraction 1.5–2.4 times slower with identical output, so the release profile keeps `opt-level = 3`.
 
 ## Delivery contract
 
