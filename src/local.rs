@@ -74,10 +74,12 @@ pub fn files(selection: Selection) -> io::Result<()> {
         if !matches!(section.outcome, Outcome::Skipped | Outcome::Failed) {
             last = Some(path);
         }
-        eprintln!("{label} {}", path.display());
+        eprintln!("{label} {}", crate::file::shown(path));
     }
     let what = match last {
-        Some(path) if added + truncated + empty == 1 => format!("{} to clipboard", path.display()),
+        Some(path) if added + truncated + empty == 1 => {
+            format!("{} to clipboard", crate::file::shown(path))
+        }
         _ => "context".to_owned(),
     };
     deliver(payload, &format!("Copied {what}"))?;

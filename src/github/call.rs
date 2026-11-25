@@ -49,7 +49,7 @@ impl Client {
         json: Option<&str>,
         timeout: Duration,
     ) -> Result<Reply, CallError> {
-        let url = self.url(path_or_url);
+        let url = self.url(path_or_url).map_err(CallError::Transport)?;
         let auth = format!("Bearer {}", self.token);
         let response = match json {
             None => self
@@ -93,7 +93,8 @@ impl Client {
             .body_mut()
             .with_config()
             .limit(256 * 1024 * 1024)
-            .read_to_string()
+            .read_to_vec()
+            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
             .map_err(failure)?;
         Ok(Reply {
             status,

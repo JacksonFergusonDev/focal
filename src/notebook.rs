@@ -121,7 +121,7 @@ fn render_output(output: &Value) -> Option<String> {
 }
 
 pub fn render(path: &Path, file: File) -> String {
-    let mut text = format!("# Notebook: {}\n\n", path.display());
+    let mut text = format!("# Notebook: {}\n\n", crate::file::shown(path));
     let nb = match serde_json::from_reader::<_, Value>(BufReader::new(file)) {
         Ok(nb) if nb.is_object() => nb,
         Ok(_) => return format!("{text}[Error parsing notebook: Invalid notebook format]\n\n"),

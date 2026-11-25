@@ -92,7 +92,7 @@ impl GitHub {
             let note = format!(
                 "WARNING: {reason}; remaining GitHub enrichment skipped. Local Git evidence is preserved."
             );
-            eprintln!("warning: {note}");
+            eprintln!("warning: {}", note.trim_start_matches("WARNING: "));
             *self.stop_note.lock().unwrap() = Some(note);
         }
     }

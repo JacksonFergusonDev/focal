@@ -10,6 +10,8 @@
 mod cache;
 mod sync;
 
+pub use sync::redact;
+
 use std::fs::{self, File};
 use std::io;
 use std::path::Path;
@@ -19,7 +21,12 @@ const OFFLINE: &str = "warning: Could not update the cached repository; using th
 /// Prepares the cached checkout for `url` and changes the working directory into it.
 pub fn enter(url: &str) -> io::Result<()> {
     let root = cache::root()?;
-    fs::create_dir_all(&root)?;
+    fs::create_dir_all(&root).map_err(|error| {
+        crate::output::fail(
+            format!("could not create the --repo cache at {}: {error}", root.display()),
+            "set XDG_CACHE_HOME to a writable directory",
+        )
+    })?;
     let name = cache::entry_name(url);
     let entry = root.join(&name);
 

@@ -106,7 +106,7 @@ pub fn limit(content: &str, max_tokens: usize) -> String {
     if max_tokens == 0 {
         return content.to_owned();
     }
-    let max_chars = max_tokens * 4;
+    let max_chars = max_tokens.saturating_mul(4);
     if chars(content) <= max_chars {
         return content.to_owned();
     }

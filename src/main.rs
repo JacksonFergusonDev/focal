@@ -1,3 +1,20 @@
+/// Diagnostics never fail the command: unlike the std macros, these ignore write errors
+/// such as a closed stderr pipe (`focal files --all 2>&1 | head -1`), which would otherwise
+/// panic and lose the payload. Declared before the modules so it shadows the std macros.
+macro_rules! eprintln {
+    ($($arg:tt)*) => {{
+        use std::io::Write as _;
+        let _ = writeln!(std::io::stderr(), $($arg)*);
+    }};
+}
+
+macro_rules! eprint {
+    ($($arg:tt)*) => {{
+        use std::io::Write as _;
+        let _ = write!(std::io::stderr(), $($arg)*);
+    }};
+}
+
 mod ci_fail;
 mod cli;
 mod clipboard;

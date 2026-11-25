@@ -14,7 +14,12 @@ impl Client {
     /// GETs a response body as bytes, following redirects without credentials. Statuses
     /// outside 2xx become an [`ApiError`] carrying the final status.
     pub fn download(&self, path_or_url: &str, limit: u64) -> Result<Vec<u8>, ApiError> {
-        let url = self.url(path_or_url);
+        let url = self.url(path_or_url).map_err(|message| ApiError {
+            status: None,
+            rate_limited: false,
+            message,
+            hint: "report this response; it may come from a proxy or a misconfigured server".into(),
+        })?;
         // The shared agent's 20-second global timeout would cut off large archives on slow
         // links, so a download gets connect and first-byte limits plus a generous total.
         let mut response = self

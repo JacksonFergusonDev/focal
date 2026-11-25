@@ -22,6 +22,7 @@ nucleo-matcher = "0.3"
 zip = { version = "9.8.2", default-features = false, features = ["deflate"] }
 clap_complete = "4.6.12"
 sha2 = "0.11.1"
+signal-hook = "0.3"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 arboard = { version = "3", default-features = false }

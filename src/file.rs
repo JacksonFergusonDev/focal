@@ -43,13 +43,32 @@ pub struct Section {
     pub outcome: Outcome,
 }
 
+/// A path for headings and progress lines, with control characters such as newlines and
+/// ESC written as `\ooo` escapes (as `tree` does) so they cannot break the payload's
+/// structure or restyle the terminal.
+pub fn shown(path: &Path) -> String {
+    let text = path.to_string_lossy();
+    if !text.chars().any(char::is_control) {
+        return text.into_owned();
+    }
+    let mut out = String::new();
+    for ch in text.chars() {
+        if ch.is_control() {
+            out.push_str(&format!("\\{:03o}", ch as u32));
+        } else {
+            out.push(ch);
+        }
+    }
+    out
+}
+
 /// Like [`format`], but a file that cannot be read becomes a warning and an inline note
 /// instead of aborting the whole payload.
 pub fn section(path: &Path, noise: &Noise) -> Section {
     format(path, noise).unwrap_or_else(|error| {
-        eprintln!("warning: could not read {}: {error}", path.display());
+        eprintln!("warning: could not read {}: {error}", shown(path));
         Section {
-            markdown: format!("# {}\n[Could not read file: {error}]\n\n", path.display()),
+            markdown: format!("# {}\n[Could not read file: {error}]\n\n", shown(path)),
             outcome: Outcome::Failed,
         }
     })
@@ -95,7 +114,7 @@ pub fn format(path: &Path, noise: &Noise) -> io::Result<Section> {
         read_text(file, path, size)?
     };
     Ok(Section {
-        markdown: format!("# {}\n{}\n\n", path.display(), fenced(&content, ext)),
+        markdown: format!("# {}\n{}\n\n", shown(path), fenced(&content, ext)),
         outcome,
     })
 }
@@ -114,7 +133,7 @@ pub fn fenced(content: &str, language: &str) -> String {
 fn omitted(path: &Path, size: u64, kind: &str) -> String {
     format!(
         "[{kind} file omitted: {}]\nSize: {size} {}\nMetadata: {kind}",
-        path.display(),
+        shown(path),
         if size == 1 { "byte" } else { "bytes" }
     )
 }

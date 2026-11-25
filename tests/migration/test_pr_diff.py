@@ -232,3 +232,44 @@ def test_missing_credentials(github, github_checkout, env, focal):
     assert result.returncode == 1
     assert b"error: no GitHub credentials found for github.com" in result.stderr
     assert github.requests == []
+
+
+def test_diff_that_is_not_utf8_is_decoded_lossily(github, github_checkout, env, focal):
+    github.add(f"{PULLS}/3", pull(3, "Latin-1"))
+    github.add(f"{PULLS}/3", raw=b"diff --git a/l b/l\n+caf\xe9\n")
+    result = focal(github_checkout, env, "pr-diff", "3")
+    assert result.returncode == 0, result.stderr
+    assert "+caf�" in result.stdout.decode()
+
+
+def test_too_many_requests_is_a_rate_limit(github, github_checkout, env, focal):
+    github.add(
+        f"{PULLS}/4",
+        {"message": "slow down"},
+        status=429,
+        headers={"Retry-After": "60"},
+    )
+    result = focal(github_checkout, env, "pr-diff", "4")
+    assert result.returncode == 1
+    stderr = result.stderr.decode()
+    assert "rate limit" in stderr
+    assert "wait 60 seconds" in stderr
+
+
+def test_credentials_in_origin_are_not_printed(github, github_checkout, env, focal):
+    subprocess.run(
+        [
+            "git",
+            "remote",
+            "set-url",
+            "origin",
+            "https://x-access-token:ghp_SECRET@github.com/",
+        ],
+        cwd=github_checkout,
+        check=True,
+    )
+    result = focal(github_checkout, env, "pr-diff", "1")
+    assert result.returncode == 1
+    assert b"could not read a GitHub owner and repository" in result.stderr
+    assert b"ghp_SECRET" not in result.stderr
+    assert not github.requests

@@ -351,10 +351,32 @@ pub fn render(frame: &mut Frame, state: &mut State, options: &Options, preview: 
 /// Restores the terminal however the picker exits, including during a panic.
 struct Restore {
     tty: File,
+    signals: Option<signal_hook::iterator::Handle>,
+}
+
+/// Raw mode turns off ISIG, so these arrive only from outside (`kill`, `timeout`, a closed
+/// terminal window). Restore the terminal before exiting with the conventional status.
+fn restore_on_signal(tty: File) -> io::Result<signal_hook::iterator::Handle> {
+    use signal_hook::consts::{SIGHUP, SIGINT, SIGQUIT, SIGTERM};
+    let mut signals = signal_hook::iterator::Signals::new([SIGTERM, SIGINT, SIGHUP, SIGQUIT])?;
+    let handle = signals.handle();
+    std::thread::spawn(move || {
+        if let Some(signal) = signals.forever().next() {
+            let mut tty = tty;
+            let _ = execute!(tty, LeaveAlternateScreen, cursor::Show);
+            let _ = terminal::disable_raw_mode();
+            let _ = tty.flush();
+            std::process::exit(128 + signal);
+        }
+    });
+    Ok(handle)
 }
 
 impl Drop for Restore {
     fn drop(&mut self) {
+        if let Some(signals) = self.signals.take() {
+            signals.close();
+        }
         let _ = execute!(self.tty, LeaveAlternateScreen, cursor::Show);
         let _ = terminal::disable_raw_mode();
         let _ = self.tty.flush();
@@ -385,7 +407,11 @@ pub fn pick(
     let mut previews: HashMap<usize, String> = HashMap::new();
 
     terminal::enable_raw_mode()?;
-    let mut guard = Restore { tty };
+    let signals = restore_on_signal(tty.try_clone()?)?;
+    let mut guard = Restore {
+        tty,
+        signals: Some(signals),
+    };
     execute!(guard.tty, EnterAlternateScreen)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(guard.tty.try_clone()?))?;
     let mut requested = None;

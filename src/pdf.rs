@@ -191,12 +191,15 @@ pub fn extract(bytes: &[u8]) -> Result<String, Failure> {
 /// and as a warning with a hint on stderr for the person running the command.
 pub fn render(path: &Path, bytes: &[u8]) -> (String, bool) {
     match extract(bytes) {
-        Ok(content) => (format!("# PDF: {}\n\n{content}\n\n", path.display()), true),
+        Ok(content) => (
+            format!("# PDF: {}\n\n{content}\n\n", crate::file::shown(path)),
+            true,
+        ),
         Err(failure) => {
             let reason = failure.reason();
             eprintln!(
                 "warning: could not extract text from {}: {reason}",
-                path.display()
+                crate::file::shown(path)
             );
             if let Some(hint) = failure.hint() {
                 eprintln!("  hint: {hint}");
@@ -204,7 +207,7 @@ pub fn render(path: &Path, bytes: &[u8]) -> (String, bool) {
             (
                 format!(
                     "# PDF: {}\n\n[Could not extract PDF text: {reason}]\n\n",
-                    path.display()
+                    crate::file::shown(path)
                 ),
                 false,
             )

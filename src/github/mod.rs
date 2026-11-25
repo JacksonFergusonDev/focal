@@ -82,8 +82,9 @@ pub fn current_repo() -> io::Result<Repo> {
     })?;
     let url = remote.url().unwrap_or_default();
     parse_remote(url).ok_or_else(|| {
+        let shown = crate::remote::redact(url, url);
         crate::output::fail(
-            format!("could not read a GitHub owner and repository from origin '{url}'"),
+            format!("could not read a GitHub owner and repository from origin '{shown}'"),
             "point origin at a GitHub repository URL",
         )
     })
@@ -220,6 +221,10 @@ impl Client {
             .unwrap_or_else(|| {
                 if repo.host == "github.com" {
                     "https://api.github.com".into()
+                } else if repo.host.ends_with(".ghe.com") {
+                    // GitHub Enterprise Cloud with data residency serves the API from a
+                    // subdomain, like github.com, not under /api/v3.
+                    format!("https://api.{}", repo.host)
                 } else {
                     format!("https://{}/api/v3", repo.host)
                 }
@@ -239,18 +244,40 @@ impl Client {
         }
     }
 
-    /// Resolves an API path (`/repos/o/r/issues?...`) or passes an absolute URL through.
-    pub fn url(&self, path_or_url: &str) -> String {
-        if path_or_url.starts_with("http://") || path_or_url.starts_with("https://") {
-            path_or_url.to_owned()
+    /// Resolves an API path (`/repos/o/r/issues?...`), or checks that an absolute URL, such
+    /// as a `Link` page, is on the API's own origin. Every request carries the token, so a
+    /// URL elsewhere is refused rather than followed.
+    pub fn url(&self, path_or_url: &str) -> Result<String, String> {
+        if !(path_or_url.starts_with("http://") || path_or_url.starts_with("https://")) {
+            return Ok(format!(
+                "{}/{}",
+                self.api,
+                path_or_url.trim_start_matches('/')
+            ));
+        }
+        let origin = |url: &str| -> String {
+            let (scheme, rest) = url.split_once("://").unwrap_or(("", url));
+            let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+            format!("{scheme}://{}", authority.to_ascii_lowercase())
+        };
+        if origin(path_or_url) == origin(&self.api) {
+            Ok(path_or_url.to_owned())
         } else {
-            format!("{}/{}", self.api, path_or_url.trim_start_matches('/'))
+            Err(format!(
+                "GitHub pointed to {path_or_url}, outside the API at {}; refusing to send credentials there",
+                origin(&self.api)
+            ))
         }
     }
 
     /// Performs a GET with the given `Accept` header and maps failures to [`ApiError`].
     pub fn request(&self, path_or_url: &str, accept: &str) -> Result<Page, ApiError> {
-        let url = self.url(path_or_url);
+        let url = self.url(path_or_url).map_err(|message| ApiError {
+            status: None,
+            rate_limited: false,
+            message,
+            hint: "report this response; it may come from a proxy or a misconfigured server".into(),
+        })?;
         let response = self
             .agent
             .get(&url)
@@ -280,11 +307,14 @@ impl Client {
         let next = header("link").as_deref().and_then(next_link);
         let remaining = header("x-ratelimit-remaining");
         let reset = header("x-ratelimit-reset");
+        let retry_after = header("retry-after");
+        // Lossy, so a PR diff touching a Latin-1 file still renders.
         let body = response
             .body_mut()
             .with_config()
             .limit(256 * 1024 * 1024)
-            .read_to_string()
+            .read_to_vec()
+            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
             .map_err(|error| ApiError {
                 status: Some(status),
                 rate_limited: false,
@@ -295,8 +325,11 @@ impl Client {
             return Ok(Page { body, next });
         }
         let detail = api_message(&body).unwrap_or_else(|| body.trim().chars().take(200).collect());
-        let rate_limited = (status == 403 || status == 429)
-            && (remaining.as_deref() == Some("0") || detail.to_lowercase().contains("rate limit"));
+        let rate_limited = status == 429
+            || (status == 403
+                && (remaining.as_deref() == Some("0")
+                    || retry_after.is_some()
+                    || detail.to_lowercase().contains("rate limit")));
         let (message, hint) = match status {
             401 => (
                 format!("GitHub rejected the credentials (HTTP 401): {detail}"),
@@ -304,11 +337,15 @@ impl Client {
             ),
             _ if rate_limited => (
                 format!("GitHub API rate limit exceeded (HTTP {status})"),
-                match reset.and_then(|r| r.parse::<u64>().ok()) {
-                    Some(epoch) => {
+                match (
+                    retry_after.and_then(|r| r.parse::<u64>().ok()),
+                    reset.and_then(|r| r.parse::<u64>().ok()),
+                ) {
+                    (Some(seconds), _) => format!("wait {seconds} seconds and retry"),
+                    (None, Some(epoch)) => {
                         format!("wait until the limit resets (Unix time {epoch}) and retry")
                     }
-                    None => "wait a few minutes and retry".to_owned(),
+                    (None, None) => "wait a few minutes and retry".to_owned(),
                 },
             ),
             403 => (
@@ -347,8 +384,13 @@ impl Client {
     pub fn get_all(&self, path_or_url: &str) -> Result<Vec<Value>, ApiError> {
         let mut items = Vec::new();
         let mut next = Some(path_or_url.to_owned());
+        let mut seen = std::collections::HashSet::new();
         for _ in 0..MAX_PAGES {
             let Some(url) = next.take() else { break };
+            if !seen.insert(url.clone()) {
+                eprintln!("warning: GitHub pagination repeated {url}; stopped there");
+                break;
+            }
             let page = self.request(&url, "application/vnd.github+json")?;
             match serde_json::from_str::<Value>(&page.body) {
                 Ok(Value::Array(values)) => items.extend(values),
@@ -363,6 +405,11 @@ impl Client {
             }
             next = page.next;
         }
+        if next.is_some() {
+            eprintln!(
+                "warning: stopped after {MAX_PAGES} pages from GitHub; later results are omitted"
+            );
+        }
         Ok(items)
     }
 
@@ -374,6 +421,28 @@ impl Client {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn absolute_urls_must_stay_on_the_api_origin() {
+        let repo = parse_remote("https://github.com/o/r").unwrap();
+        let client = Client::new(repo, "t".into(), DEFAULT_TIMEOUT);
+        let api = client.api.clone();
+        assert!(
+            client
+                .url(&format!("{api}/repos/o/r/issues?page=2"))
+                .is_ok()
+        );
+        assert!(client.url("/repos/o/r").unwrap().starts_with(&api));
+        for elsewhere in [
+            "https://evil.example/repos/o/r?page=2",
+            "http://api.github.com/repos/o/r",
+            "https://api.github.com:8443/repos/o/r",
+            "https://api.github.com.evil.example/repos",
+        ] {
+            assert!(client.url(elsewhere).is_err(), "{elsewhere}");
+        }
+    }
+
     use super::*;
     use std::io::{BufRead, BufReader, Write};
     use std::net::TcpListener;

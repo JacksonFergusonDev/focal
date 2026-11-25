@@ -137,7 +137,9 @@ fn conflicted(repo: &Repository, specs: &[String]) -> Result<Vec<PathBuf>, git2:
     if !index.has_conflicts() {
         return Ok(Vec::new());
     }
-    let pathspec = (!specs.is_empty()).then(|| git2::Pathspec::new(specs.iter())).transpose()?;
+    let pathspec = (!specs.is_empty())
+        .then(|| git2::Pathspec::new(specs.iter()))
+        .transpose()?;
     let mut paths = Vec::new();
     for conflict in index.conflicts()? {
         let conflict = conflict?;
