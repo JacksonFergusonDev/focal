@@ -60,18 +60,26 @@ struct Filter<'a> {
     specs: Vec<String>,
     explicit: bool,
     noise: &'a Noise,
+    /// Unmerged paths, rendered separately because libgit2 has no combined diff.
+    conflicts: HashSet<PathBuf>,
 }
 
 impl Filter<'_> {
     fn keep(&self, path: &Path) -> bool {
+        if self.conflicts.contains(path) {
+            return false;
+        }
         self.explicit
             || !path
                 .file_name()
                 .is_some_and(|name| self.noise.matches(&name.to_string_lossy()))
     }
 
-    fn keep_bytes(&self, path: &[u8]) -> bool {
-        self.keep(Path::new(&*String::from_utf8_lossy(path)))
+    /// Status lines keep unmerged paths, which [`Filter::keep`] leaves out of patches.
+    fn keep_status(&self, path: &[u8]) -> bool {
+        let path = String::from_utf8_lossy(path);
+        let path = Path::new(&*path);
+        self.conflicts.contains(path) || self.keep(path)
     }
 
     /// Builds the diff twice: once to find candidate paths, then limited to the kept paths
@@ -86,11 +94,10 @@ impl Filter<'_> {
             first.pathspec(spec);
         }
         let diff = build(&mut first)?;
+        let deltas = diff.deltas().len();
         let mut seen = HashSet::new();
         let mut kept = Vec::new();
-        let mut total = 0;
         for delta in diff.deltas().filter(|delta| want(delta)) {
-            total += 1;
             if let Some(path) = delta_path(&delta)
                 && self.keep(&path)
                 && seen.insert(path.clone())
@@ -106,7 +113,7 @@ impl Filter<'_> {
         for path in &kept {
             second.pathspec(path);
         }
-        let mut diff = if kept.len() == total {
+        let mut diff = if kept.len() == deltas {
             diff
         } else {
             build(&mut second)?
@@ -122,6 +129,84 @@ fn any(_: &DiffDelta) -> bool {
 
 fn untracked(delta: &DiffDelta) -> bool {
     delta.status() == Delta::Untracked
+}
+
+/// Unmerged index paths matching the user's pathspecs.
+fn conflicted(repo: &Repository, specs: &[String]) -> Result<Vec<PathBuf>, git2::Error> {
+    let index = repo.index()?;
+    if !index.has_conflicts() {
+        return Ok(Vec::new());
+    }
+    let pathspec = (!specs.is_empty()).then(|| git2::Pathspec::new(specs.iter())).transpose()?;
+    let mut paths = Vec::new();
+    for conflict in index.conflicts()? {
+        let conflict = conflict?;
+        let Some(entry) = conflict.our.or(conflict.their).or(conflict.ancestor) else {
+            continue;
+        };
+        let path = PathBuf::from(String::from_utf8_lossy(&entry.path).into_owned());
+        if pathspec
+            .as_ref()
+            .is_none_or(|spec| spec.matches_path(&path, git2::PathspecFlags::DEFAULT))
+        {
+            paths.push(path);
+        }
+    }
+    paths.sort();
+    paths.dedup();
+    Ok(paths)
+}
+
+/// The conflict regions of a working-tree file with three lines of context, standing in
+/// for Git's combined diff.
+fn conflict_regions(text: &str) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut regions: Vec<(usize, usize)> = Vec::new();
+    let mut start = None;
+    for (index, line) in lines.iter().enumerate() {
+        if line.starts_with("<<<<<<<") {
+            start.get_or_insert(index);
+        } else if line.starts_with(">>>>>>>")
+            && let Some(begin) = start.take()
+        {
+            let from = begin.saturating_sub(3);
+            let to = (index + 4).min(lines.len());
+            match regions.last_mut() {
+                Some(last) if from <= last.1 => last.1 = to,
+                _ => regions.push((from, to)),
+            }
+        }
+    }
+    let mut out = String::new();
+    for (from, to) in regions {
+        out.push_str(&format!("@@ lines {}-{} @@\n", from + 1, to));
+        for line in &lines[from..to] {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    out
+}
+
+/// Text standing in for the patch of an unmerged path.
+fn unmerged(repo: &Repository, path: &Path, mode: Mode) -> String {
+    let mut out = format!("* Unmerged path {}\n", path.display());
+    if mode == Mode::Staged {
+        return out;
+    }
+    let file = repo.workdir().map(|root| root.join(path));
+    match file.and_then(|file| std::fs::read(file).ok()) {
+        Some(bytes) if bytes.contains(&0) => out.push_str("(binary file)\n"),
+        Some(bytes) => {
+            let regions = conflict_regions(&String::from_utf8_lossy(&bytes));
+            if regions.is_empty() {
+                out.push_str("(no conflict markers in the working tree)\n");
+            }
+            out.push_str(&regions);
+        }
+        None => out.push_str("(deleted in the working tree)\n"),
+    }
+    out
 }
 
 /// Resolves a cwd-relative pathspec against the repository root, collapsing `.` and `..`.
@@ -161,14 +246,17 @@ pub fn render(
     let prefix = git::prefix(&repo, &cwd);
     let noise = Noise::load();
     let explicit = !paths.is_empty();
+    let specs: Vec<String> = paths
+        .iter()
+        .map(|arg| root_spec(&prefix, arg))
+        .filter(|spec| !spec.is_empty())
+        .collect();
+    let conflicts = conflicted(&repo, &specs).map_err(io::Error::other)?;
     let filter = Filter {
-        specs: paths
-            .iter()
-            .map(|arg| root_spec(&prefix, arg))
-            .filter(|spec| !spec.is_empty())
-            .collect(),
+        specs,
         explicit,
         noise: &noise,
+        conflicts: conflicts.iter().cloned().collect(),
     };
     let target = match (explicit, mode) {
         (true, _) => "specified files",
@@ -226,18 +314,36 @@ pub fn render(
         if let Some(extra) = &extra {
             patches.push_str(&patch(extra)?);
         }
+        for path in &conflicts {
+            patches.push_str(&unmerged(&repo, path, mode));
+        }
         let patches = patches.trim_end_matches('\n');
         if patches.is_empty() {
             return Ok(None);
         }
 
         let mut out = String::new();
-        let status = git::porcelain_where(&repo, &filter.specs, |path| filter.keep_bytes(path))?;
+        let status = git::porcelain_where(&repo, &filter.specs, |path| filter.keep_status(path))?;
         if !status.is_empty() {
             out.push_str(&format!("### Status\n```\n{status}```\n\n"));
         }
-        if let Some(diff) = &diff {
-            let summary = stat(diff)?;
+        let mut summary = match &diff {
+            Some(diff) => stat(diff)?,
+            None => String::new(),
+        };
+        if !conflicts.is_empty() {
+            // Unmerged rows go above the totals line, as in `git diff --stat`.
+            let totals = summary
+                .trim_end_matches('\n')
+                .rfind('\n')
+                .map_or(0, |index| index + 1);
+            let rows: String = conflicts
+                .iter()
+                .map(|path| format!(" {} | Unmerged\n", path.display()))
+                .collect();
+            summary.insert_str(totals, &rows);
+        }
+        {
             if !summary.trim().is_empty() {
                 out.push_str(&format!("### Summary\n```\n{summary}```\n\n"));
             }
@@ -258,6 +364,7 @@ pub fn render(
                     files.push(git::relative(path, &prefix));
                 }
             }
+            files.extend(conflicts.iter().map(|path| git::relative(path, &prefix)));
             let mut sections = String::new();
             for path in files.iter().filter(|path| path.is_file()) {
                 match file::format(path, &noise) {

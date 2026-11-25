@@ -43,6 +43,18 @@ pub struct Section {
     pub outcome: Outcome,
 }
 
+/// Like [`format`], but a file that cannot be read becomes a warning and an inline note
+/// instead of aborting the whole payload.
+pub fn section(path: &Path, noise: &Noise) -> Section {
+    format(path, noise).unwrap_or_else(|error| {
+        eprintln!("warning: could not read {}: {error}", path.display());
+        Section {
+            markdown: format!("# {}\n[Could not read file: {error}]\n\n", path.display()),
+            outcome: Outcome::Failed,
+        }
+    })
+}
+
 pub fn format(path: &Path, noise: &Noise) -> io::Result<Section> {
     let name = path.file_name().unwrap_or_default().to_string_lossy();
     let ext = name.rsplit_once('.').map_or("", |(_, ext)| ext);
@@ -101,8 +113,9 @@ pub fn fenced(content: &str, language: &str) -> String {
 
 fn omitted(path: &Path, size: u64, kind: &str) -> String {
     format!(
-        "[{kind} file omitted: {}]\nSize: {size} bytes\nMetadata: {kind}",
-        path.display()
+        "[{kind} file omitted: {}]\nSize: {size} {}\nMetadata: {kind}",
+        path.display(),
+        if size == 1 { "byte" } else { "bytes" }
     )
 }
 

@@ -149,6 +149,51 @@ def test_all_includes_untracked_and_deletions(repo, env):
     assert b"Copied diff of all changes" in result.stderr
 
 
+def test_all_lists_each_patch_once(repo, env):
+    (repo / "main.py").write_text("changed\n")
+    (repo / "new.txt").write_text("new\n")
+    result = run(repo, env, "-a")
+    assert result.returncode == 0, result.stderr
+    patch = section(result.stdout, "Diff")
+    assert patch.count("+++ b/main.py") == 1
+    assert patch.count("+++ b/new.txt") == 1
+
+
+@pytest.fixture
+def conflicted(repo, env):
+    git(repo, env, "checkout", "-qb", "other")
+    (repo / "main.py").write_text("theirs\n")
+    git(repo, env, "commit", "-qam", "theirs")
+    git(repo, env, "checkout", "-q", "main")
+    (repo / "main.py").write_text("ours\n")
+    git(repo, env, "commit", "-qam", "ours")
+    subprocess.run(
+        ["git", "merge", "-q", "other"], cwd=repo, env=env, capture_output=True
+    )
+    return repo
+
+
+@pytest.mark.parametrize("mode", [[], ["-a"]])
+def test_unmerged_path_shows_conflict(conflicted, env, mode):
+    result = run(conflicted, env, *mode)
+    assert result.returncode == 0, result.stderr
+    assert "UU main.py" in section(result.stdout, "Status")
+    if not mode:
+        assert "Unmerged" in section(result.stdout, "Summary")
+    patch = section(result.stdout, "Diff")
+    assert "<<<<<<< HEAD" in patch
+    assert ">>>>>>> other" in patch
+    assert "deleted file mode" not in patch
+
+
+def test_staged_unmerged_path(conflicted, env):
+    result = run(conflicted, env, "--staged")
+    assert result.returncode == 0, result.stderr
+    patch = section(result.stdout, "Diff")
+    assert "* Unmerged path main.py" in patch
+    assert "deleted file mode" not in patch
+
+
 def test_all_on_unborn_branch(tmp_path, env):
     git(tmp_path, env, "init", "-q", "-b", "main")
     (tmp_path / "first.py").write_text("one\n")

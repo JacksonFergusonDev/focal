@@ -79,7 +79,13 @@ fn dispatch(action: Action) -> io::Result<ExitCode> {
 }
 
 fn run() -> io::Result<ExitCode> {
-    match cli::route(std::env::args().skip(1).collect())? {
+    match cli::route(
+        // Lossy, so a non-UTF-8 argument is reported as a missing path instead of a panic.
+        std::env::args_os()
+            .skip(1)
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect(),
+    )? {
         Route::Print(text) => {
             io::stdout().lock().write_all(text.as_bytes())?;
             Ok(ExitCode::SUCCESS)

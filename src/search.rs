@@ -14,6 +14,7 @@ const CONTEXT_LINES: usize = 5;
 /// Compiles a pattern with ripgrep's default regex settings.
 pub fn matcher(pattern: &str) -> io::Result<RegexMatcher> {
     RegexMatcherBuilder::new()
+        .line_terminator(Some(b'\n'))
         .build(pattern)
         .map_err(|error| io::Error::other(format!("invalid regex '{pattern}': {error}")))
 }
@@ -32,7 +33,13 @@ fn candidates(python_only: bool) -> io::Result<Vec<PathBuf>> {
     }
     let mut files = Vec::new();
     for entry in builder.build() {
-        let entry = entry.map_err(io::Error::other)?;
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) => {
+                eprintln!("warning: {error}");
+                continue;
+            }
+        };
         if entry.file_type().is_some_and(|kind| kind.is_file()) {
             files.push(entry.into_path());
         }

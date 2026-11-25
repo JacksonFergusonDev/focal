@@ -26,10 +26,21 @@ pub fn walk(root: &Path) -> io::Result<Vec<PathBuf>> {
     }
     let mut files = Vec::new();
     for entry in builder.build() {
-        let entry = entry.map_err(io::Error::other)?;
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) => {
+                eprintln!("warning: {error}");
+                continue;
+            }
+        };
         if entry.file_type().is_some_and(|kind| kind.is_file()) {
             let path = entry.into_path();
-            files.push(path.strip_prefix(".").unwrap_or(&path).to_owned());
+            // Like fd, drop the `./` the walk adds from `.`, except before a leading dash,
+            // and keep whatever prefix the user wrote.
+            let bare = path.strip_prefix(".").ok().filter(|bare| {
+                root == Path::new(".") && !bare.as_os_str().as_bytes().starts_with(b"-")
+            });
+            files.push(bare.unwrap_or(&path).to_owned());
         }
     }
     Ok(files)
@@ -40,24 +51,28 @@ pub fn resolve(paths: Vec<PathBuf>) -> io::Result<Vec<PathBuf>> {
     for path in paths {
         if path.as_os_str().as_bytes().ends_with(b"/") {
             if !path.is_dir() {
+                let shown = path.to_string_lossy();
                 return Err(io::Error::other(format!(
                     "directory not found: {}",
-                    path.display()
+                    shown.trim_end_matches('/')
                 )));
             }
             selected.extend(walk(&path)?);
         } else if path.is_file() {
             selected.push(path);
         } else if path.is_dir() {
-            return Err(io::Error::other(format!(
-                "'{}' is a directory; append a trailing slash to select its contents",
-                path.display()
-            )));
+            let shown = path.display();
+            return Err(crate::output::fail(
+                format!(
+                    "'{shown}' is a directory; append a trailing slash (e.g. '{shown}/') to select its contents"
+                ),
+                &format!("use '{shown}/' to select all files in this directory"),
+            ));
         } else {
-            return Err(io::Error::other(format!(
-                "file not found: {}",
-                path.display()
-            )));
+            return Err(crate::output::fail(
+                format!("file not found: {}", path.display()),
+                "verify the path or run 'focal files' to search interactively",
+            ));
         }
     }
     let mut seen = HashSet::new();

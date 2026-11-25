@@ -121,6 +121,7 @@ pub enum Action {
     },
     /// Extract named files, directory contents (dir/), or all discovered files.
     Files {
+        /// Extract every discovered file, respecting ignore rules.
         #[arg(short, long, group = "mode")]
         all: bool,
         /// Extract staged files (excluding deletions) from the working tree.
@@ -272,8 +273,13 @@ pub fn route(args: Vec<String>) -> io::Result<Route> {
         }
         _ => {}
     }
+    let mut rest: Vec<String> = rest.into_iter().skip_while(|arg| arg == "--").collect();
+    // Legacy `web` printed its help for a lone `help` argument rather than fetching it.
+    if matches!(rest.as_slice(), [command, arg] if command == "web" && arg == "help") {
+        rest[1] = "--help".into();
+    }
     let mut argv = vec!["focal".to_owned()];
-    argv.extend(rest.into_iter().skip_while(|arg| arg == "--"));
+    argv.extend(rest);
     let cli = Box::new(Cli::try_parse_from(argv).unwrap_or_else(|error| error.exit()));
     Ok(Route::Run { repo, cli })
 }

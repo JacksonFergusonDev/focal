@@ -34,8 +34,7 @@ fn git_info(cwd: &Path) -> Result<String, git2::Error> {
 
 fn append_files(payload: &mut String, paths: &[PathBuf], noise: &Noise) -> io::Result<()> {
     for path in paths {
-        let section = file::format(path, noise)
-            .map_err(|e| io::Error::new(e.kind(), format!("{}: {e}", path.display())))?;
+        let section = file::section(path, noise);
         payload.push_str(&section.markdown);
     }
     Ok(())

@@ -108,7 +108,23 @@ pub fn render() -> io::Result<String> {
         .build();
     let mut root = Node::default();
     for entry in walker {
-        let entry = entry.map_err(io::Error::other)?;
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) => {
+                // An unreadable directory fails right after its own entry, which is the
+                // deepest last node; mark it as GNU tree does.
+                let mut node = &mut root;
+                while let Some(last) = node.children.last_mut() {
+                    node = last;
+                }
+                if node.label.ends_with('/') {
+                    node.label.push_str("  [error opening dir]");
+                } else {
+                    eprintln!("warning: {error}");
+                }
+                continue;
+            }
+        };
         if entry.depth() == 0 {
             continue;
         }

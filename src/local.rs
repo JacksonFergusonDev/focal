@@ -47,8 +47,7 @@ pub fn files(selection: Selection) -> io::Result<()> {
     let (mut added, mut empty, mut skipped, mut truncated, mut failed) = (0, 0, 0, 0, 0);
     let mut last = None;
     for path in &paths {
-        let section = file::format(path, &noise)
-            .map_err(|e| io::Error::new(e.kind(), format!("{}: {e}", path.display())))?;
+        let section = file::section(path, &noise);
         payload.push_str(&section.markdown);
         let label = match section.outcome {
             Outcome::Empty => {
@@ -142,8 +141,7 @@ pub fn symbol(pattern: Option<String>) -> io::Result<()> {
     let noise = Noise::load();
     let mut payload = header()?;
     for path in &paths {
-        let section = file::format(path, &noise)
-            .map_err(|e| io::Error::new(e.kind(), format!("{}: {e}", path.display())))?;
+        let section = file::section(path, &noise);
         payload.push_str(section.markdown.trim_end_matches('\n'));
         payload.push_str("\n\n");
     }
