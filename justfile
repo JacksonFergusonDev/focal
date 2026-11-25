@@ -22,8 +22,8 @@ default:
 install: build
     @printf "\n{{ blue }}=== Installing Focal ==={{ nc }}\n"
     mkdir -p {{ prefix }} {{ zsh_comp_dir }}
-    # Replace any symlink left by the old Bash dispatcher instead of writing through it.
-    rm -f "{{ prefix }}/focal"
+    # Replace symlinks left by the old Bash install instead of writing through them.
+    rm -f "{{ prefix }}/focal" "{{ zsh_comp_dir }}/_focal"
     install -m 755 target/release/focal "{{ prefix }}/focal"
     "{{ prefix }}/focal" completions zsh > "{{ zsh_comp_dir }}/_focal"
     rm -f ~/.zcompdump*
