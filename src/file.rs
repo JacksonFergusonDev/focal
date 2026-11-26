@@ -4,7 +4,7 @@ use std::io::{self, BufRead, BufReader, Read};
 use std::path::Path;
 
 const MAX_LINES: usize = 1_500;
-const MAX_BYTES: usize = 100_000;
+pub const MAX_BYTES: usize = 100_000;
 
 #[derive(Deserialize)]
 pub struct Noise {
@@ -87,10 +87,8 @@ pub fn format(path: &Path, noise: &Noise) -> io::Result<Section> {
         });
     }
     if notebook {
-        return Ok(Section {
-            markdown: crate::notebook::render(path, file),
-            outcome: Outcome::Text,
-        });
+        let (markdown, outcome) = crate::notebook::render(path, file);
+        return Ok(Section { markdown, outcome });
     }
     if pdf {
         let mut bytes = Vec::with_capacity(size as usize);
