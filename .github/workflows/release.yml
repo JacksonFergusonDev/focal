@@ -206,6 +206,9 @@ jobs:
           target: ${{ matrix.target }}
           args: --release --out dist
           manylinux: ${{ matrix.manylinux }}
+          # Pin the compiler like the other jobs; runner images ship older Rust
+          # (macos-15-intel had 1.98, below html-to-markdown-rs's 1.99 minimum).
+          rust-toolchain: 1.100.0
           # Vendored OpenSSL (for git2) is built with Perl modules the manylinux images
           # do not ship by default.
           before-script-linux: |
