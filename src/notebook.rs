@@ -148,6 +148,40 @@ fn truncated(text: &str) -> String {
     }
 }
 
+const ERROR_HEAD: usize = 1000;
+const ERROR_TAIL: usize = 2900;
+
+/// Keeps the start and end of long error text, since the innermost frames and
+/// the exception line are at the end. Cuts on line boundaries where possible.
+fn error_truncated(text: &str) -> String {
+    let total = text.chars().count();
+    if total <= ERROR_HEAD + ERROR_TAIL {
+        return text.to_owned();
+    }
+    let head_end = text
+        .char_indices()
+        .nth(ERROR_HEAD)
+        .map_or(text.len(), |(i, _)| i);
+    let head_end = match text[..head_end].rfind('\n') {
+        Some(i) if i > 0 => i,
+        _ => head_end,
+    };
+    let tail_start = text
+        .char_indices()
+        .nth(total - ERROR_TAIL)
+        .map_or(0, |(i, _)| i);
+    let tail_start = match text[tail_start..].find('\n') {
+        Some(i) => tail_start + i + 1,
+        None => tail_start,
+    };
+    let omitted = text[head_end..tail_start].chars().count();
+    format!(
+        "{}\n...[{omitted} chars omitted]...\n{}",
+        &text[..head_end],
+        &text[tail_start..]
+    )
+}
+
 fn output_block(body: &str, language: &str, prefix: Option<&str>) -> Option<String> {
     let text = truncated(body);
     let text = text.trim_end();
@@ -237,24 +271,37 @@ fn render_output(output: &Value) -> Option<String> {
             Some(output["name"].as_str().unwrap_or("stdout")),
         ),
         "error" => {
-            let description = format!(
-                "{}: {}",
-                output["ename"].as_str().unwrap_or(""),
-                output["evalue"].as_str().unwrap_or("")
-            );
-            let mut body = description.trim_matches([':', ' ']).to_owned();
-            if let Some(lines) = output["traceback"].as_array() {
-                let trace = lines
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                if !trace.trim().is_empty() {
-                    body.push('\n');
-                    body.push_str(&trace);
-                }
+            let ename = output["ename"].as_str().unwrap_or("");
+            let evalue = output["evalue"].as_str().unwrap_or("");
+            let description = match (ename.is_empty(), evalue.is_empty()) {
+                (false, false) => format!("{ename}: {evalue}"),
+                (false, true) => ename.to_owned(),
+                _ => evalue.to_owned(),
+            };
+            let trace = output["traceback"]
+                .as_array()
+                .map_or_else(String::new, |lines| {
+                    let joined = lines
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    ANSI.replace_all(&joined, "").into_owned()
+                });
+            let description = ANSI.replace_all(&description, "");
+            let last = trace.lines().rev().find(|l| !l.trim().is_empty());
+            let duplicated = last.is_some_and(|l| l.trim() == description.trim());
+            let mut body = String::new();
+            if !duplicated {
+                body.push_str(&description);
             }
-            output_block(&ANSI.replace_all(&body, ""), "text", Some("error"))
+            if !trace.trim().is_empty() {
+                if !body.is_empty() {
+                    body.push('\n');
+                }
+                body.push_str(&trace);
+            }
+            output_block(&error_truncated(&body), "text", Some("error"))
         }
         "display_data" | "execute_result" => {
             let data = output["data"].as_object()?;
@@ -827,5 +874,62 @@ mod tests {
         assert!(out.contains("- Language: py thon # injected heading\n"));
         assert!(!out.contains("\n# injected"));
         assert!(out.contains("```py\nx\n```"));
+    }
+
+    fn error(ename: &str, evalue: &str, traceback: &[String]) -> String {
+        render_output(&json!({
+            "output_type": "error",
+            "ename": ename,
+            "evalue": evalue,
+            "traceback": traceback,
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn error_keeps_colons_in_message() {
+        let out = error("ValueError", "url: http:", &[]);
+        assert!(out.contains("ValueError: url: http:\n"), "{out}");
+    }
+
+    #[test]
+    fn error_with_one_empty_side() {
+        assert!(error("ValueError", "", &[]).contains("[error]\nValueError\n"));
+        assert!(error("", "boom:", &[]).contains("[error]\nboom:\n"));
+    }
+
+    #[test]
+    fn error_traceback_keeps_head_and_tail() {
+        let lines: Vec<String> = (0..2000).map(|i| format!("frame {i}\n")).collect();
+        let out = error("E", "failed", &lines);
+        assert!(out.contains("E: failed\nframe 0\n"));
+        assert!(out.contains("frame 1999"));
+        assert!(out.contains("\n...[") && out.contains(" chars omitted]...\n"));
+        assert!(!out.contains("frame 1000\n"));
+        assert!(out.chars().count() < 4100);
+    }
+
+    #[test]
+    fn error_truncation_is_char_safe() {
+        let lines = vec!["é".repeat(10_000)];
+        let out = error("E", "x", &lines);
+        assert!(out.contains("chars omitted"));
+    }
+
+    #[test]
+    fn error_duplicate_description_shown_once() {
+        let tb = vec![
+            "\x1b[31mTraceback\x1b[0m\n".to_owned(),
+            "ValueError: msg\n".to_owned(),
+        ];
+        let out = error("ValueError", "msg", &tb);
+        assert_eq!(out.matches("ValueError: msg").count(), 1, "{out}");
+        assert!(out.contains("Traceback"));
+    }
+
+    #[test]
+    fn error_non_duplicate_keeps_description() {
+        let out = error("E", "failed", &["\x1b[32mline\x1b[0m".to_owned()]);
+        assert!(out.contains("[error]\nE: failed\nline"), "{out}");
     }
 }
