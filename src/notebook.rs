@@ -187,12 +187,109 @@ fn render_output(output: &Value) -> Option<String> {
     }
 }
 
+/// Rewrites an nbformat 3 notebook into the v4 shape so `render` handles both.
+/// Mirrors nbformat's own v3 -> v4 upgrade for the fields focal renders.
+fn upgrade_v3(nb: &mut Value) {
+    let mut cells = Vec::new();
+    if let Some(worksheets) = nb["worksheets"].as_array() {
+        for sheet in worksheets {
+            if let Some(list) = sheet["cells"].as_array() {
+                cells.extend(list.iter().cloned());
+            }
+        }
+    }
+    let mut language = None;
+    for cell in &mut cells {
+        let Some(map) = cell.as_object_mut() else {
+            continue;
+        };
+        match map.get("cell_type").and_then(Value::as_str) {
+            Some("heading") => {
+                let level = map.get("level").and_then(Value::as_u64).unwrap_or(1);
+                let source = joined(map.get("source").unwrap_or(&Value::Null));
+                let source = format!("{} {source}", "#".repeat(level.clamp(1, 6) as usize));
+                map.insert("cell_type".into(), "markdown".into());
+                map.insert("source".into(), source.into());
+            }
+            Some("code") => {
+                if let Some(input) = map.remove("input") {
+                    map.insert("source".into(), input);
+                }
+                let count = map.remove("prompt_number").unwrap_or(Value::Null);
+                map.insert("execution_count".into(), count);
+                if language.is_none() {
+                    language = nonblank(&map["language"]).map(str::to_owned);
+                }
+                if let Some(outputs) = map.get_mut("outputs").and_then(Value::as_array_mut) {
+                    outputs.iter_mut().for_each(upgrade_v3_output);
+                }
+            }
+            _ => {}
+        }
+    }
+    nb["cells"] = Value::Array(cells);
+    if let Some(language) = language
+        && nb["metadata"].is_object()
+        && nb["metadata"]["language_info"].is_null()
+    {
+        nb["metadata"]["language_info"] = serde_json::json!({ "name": language });
+    }
+}
+
+fn upgrade_v3_output(output: &mut Value) {
+    let Some(map) = output.as_object_mut() else {
+        return;
+    };
+    match map.get("output_type").and_then(Value::as_str) {
+        Some("stream") => {
+            if let Some(name) = map.remove("stream") {
+                map.insert("name".into(), name);
+            }
+        }
+        Some("pyerr") => {
+            map.insert("output_type".into(), "error".into());
+        }
+        Some(kind @ ("pyout" | "display_data")) => {
+            if kind == "pyout" {
+                map.insert("output_type".into(), "execute_result".into());
+            }
+            let mut data = serde_json::Map::new();
+            for (short, mime) in [
+                ("text", "text/plain"),
+                ("html", "text/html"),
+                ("latex", "text/latex"),
+                ("json", "application/json"),
+                ("javascript", "application/javascript"),
+                ("png", "image/png"),
+                ("jpeg", "image/jpeg"),
+                ("svg", "image/svg+xml"),
+                ("pdf", "application/pdf"),
+            ] {
+                if let Some(value) = map.remove(short) {
+                    let value = match (short, &value) {
+                        ("json", Value::String(s)) => serde_json::from_str(s).unwrap_or(value),
+                        _ => value,
+                    };
+                    data.insert(mime.into(), value);
+                }
+            }
+            map.insert("data".into(), Value::Object(data));
+        }
+        _ => {}
+    }
+}
+
 /// Render a notebook as markdown, capped at `MAX_BYTES`. A notebook that fails to parse is
 /// reported as [`Outcome::Failed`]; one that had to be cut short as [`Outcome::Truncated`].
 pub fn render(path: &Path, file: File) -> (String, Outcome) {
     let mut text = format!("# Notebook: {}\n\n", crate::file::shown(path));
     let nb = match serde_json::from_reader::<_, Value>(BufReader::new(file)) {
-        Ok(nb) if nb.is_object() => nb,
+        Ok(mut nb) if nb.is_object() => {
+            if nb["nbformat"].as_u64() == Some(3) {
+                upgrade_v3(&mut nb);
+            }
+            nb
+        }
         Ok(_) => {
             let note = "[Error parsing notebook: Invalid notebook format]\n\n";
             return (format!("{text}{note}"), Outcome::Failed);
@@ -227,6 +324,10 @@ pub fn render(path: &Path, file: File) -> (String, Outcome) {
         write!(breakdown, ", {raw} raw").unwrap();
     }
     let total = cells.iter().filter(|c| c.is_object()).count();
+    let other = total - count("code") - count("markdown") - raw;
+    if other > 0 {
+        write!(breakdown, ", {other} other").unwrap();
+    }
     write!(text, "## Notebook Metadata\n\n- Kernel: {display}\n- Language: {lang}\n- Format: {format}\n- Cells: {total} total ({breakdown})").unwrap();
 
     let mut boundaries = Vec::new();
@@ -291,6 +392,7 @@ pub fn render(path: &Path, file: File) -> (String, Outcome) {
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::fs;
 
     fn display(data: Value) -> Option<String> {
         render_output(&json!({"output_type": "display_data", "data": data}))
@@ -367,5 +469,68 @@ mod tests {
     fn html_empty_leading_cell_keeps_alignment() {
         let html = "<table><tr><td></td><td>b</td></tr></table>";
         assert_eq!(html_to_text(html), "\tb");
+    }
+
+    fn rendered(nb: &Value) -> String {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("t.ipynb");
+        fs::write(&path, nb.to_string()).unwrap();
+        render(Path::new("t.ipynb"), File::open(&path).unwrap()).0
+    }
+
+    #[test]
+    fn nbformat3_matches_v4() {
+        let v3 = json!({
+            "nbformat": 3, "nbformat_minor": 0, "metadata": {"name": "x"},
+            "worksheets": [{"cells": [
+                {"cell_type": "heading", "level": 2, "source": ["Title"], "metadata": {}},
+                {"cell_type": "markdown", "source": "text", "metadata": {}},
+                {"cell_type": "code", "language": "python", "input": ["1+1"],
+                 "prompt_number": 3, "metadata": {}, "outputs": [
+                    {"output_type": "stream", "stream": "stdout", "text": ["hi\n"]},
+                    {"output_type": "pyout", "prompt_number": 3, "text": ["2"], "metadata": {}},
+                    {"output_type": "pyerr", "ename": "E", "evalue": "bad", "traceback": ["tb"]},
+                    {"output_type": "display_data", "png": "AAAA", "text": ["<Fig>"], "metadata": {}}
+                ]}
+            ]}]
+        });
+        let v4 = json!({
+            "nbformat": 4, "nbformat_minor": 0,
+            "metadata": {"language_info": {"name": "python"}},
+            "cells": [
+                {"cell_type": "markdown", "source": "## Title", "metadata": {}},
+                {"cell_type": "markdown", "source": "text", "metadata": {}},
+                {"cell_type": "code", "source": ["1+1"], "execution_count": 3, "metadata": {}, "outputs": [
+                    {"output_type": "stream", "name": "stdout", "text": ["hi\n"]},
+                    {"output_type": "execute_result", "execution_count": 3,
+                     "data": {"text/plain": ["2"]}, "metadata": {}},
+                    {"output_type": "error", "ename": "E", "evalue": "bad", "traceback": ["tb"]},
+                    {"output_type": "display_data",
+                     "data": {"image/png": "AAAA", "text/plain": ["<Fig>"]}, "metadata": {}}
+                ]}
+            ]
+        });
+        let a = rendered(&v3);
+        let b = rendered(&v4);
+        assert!(a.contains("Cells: 3 total (1 code, 2 markdown)"));
+        assert!(a.contains("## Title"));
+        assert!(a.contains("execution: 3"));
+        assert!(a.contains("[stdout]\nhi"));
+        assert!(a.contains("[error]\nE: bad"));
+        assert!(a.contains("[image output omitted]"));
+        assert!(a.contains("- Language: python"));
+        assert_eq!(
+            a.replace("nbformat 3.0", "F"),
+            b.replace("nbformat 4.0", "F")
+        );
+    }
+
+    #[test]
+    fn unknown_cell_types_are_counted() {
+        let nb = json!({"nbformat": 4, "nbformat_minor": 5, "metadata": {}, "cells": [
+            {"cell_type": "code", "source": "x", "execution_count": null, "outputs": []},
+            {"cell_type": "mystery", "source": "y"}
+        ]});
+        assert!(rendered(&nb).contains("Cells: 2 total (1 code, 0 markdown, 1 other)"));
     }
 }
