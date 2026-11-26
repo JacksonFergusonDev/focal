@@ -299,18 +299,25 @@ just install
 
 ### Shell Autocompletion
 
-`focal completions bash` and `focal completions zsh` print completion scripts for every command and flag.
+`focal completions bash` and `focal completions zsh` print completion scripts for every command and flag. Load them from your shell's startup file, the same way as `direnv hook` or `zoxide init`. This works however you installed Focal (Homebrew, PyPI, Cargo, or `just install`).
 
-**Zsh.** `just install` writes `~/.zsh/completions/_focal`. Add that directory to your `fpath` **before** `compinit` in `~/.zshrc`:
+**Zsh.** Add this to `~/.zshrc`:
 
 ```zsh
+source <(focal completions zsh)
+```
+
+It can go before or after `compinit`. If it runs first, Focal registers its completions at the first prompt.
+
+If you'd rather keep completions on `fpath`, write the script as a file and add its directory to `fpath` before `compinit`. `just install` does this for you with `~/.zsh/completions/_focal`:
+
+```zsh
+# One-off: focal completions zsh > ~/.zsh/completions/_focal
 fpath+=~/.zsh/completions
 
 autoload -Uz compinit
 compinit
 ```
-
-For any other installation, generate the file yourself: `focal completions zsh > ~/.zsh/completions/_focal`.
 
 **Bash.** Add this to `~/.bashrc`:
 
