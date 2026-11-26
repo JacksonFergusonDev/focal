@@ -1,4 +1,4 @@
-<!-- markdownlint-disable-file MD041 -->
+<!-- rumdl-disable-file first-line-heading -->
 <div align="center">
 
 <picture>
@@ -14,12 +14,10 @@
 
 **Stop copy-pasting your codebase into ChatGPT. One command, formatted context, straight to your clipboard.**
 
-[![Version](https://img.shields.io/github/v/release/JacksonFergusonDev/focal?style=flat-square&labelColor=0A0A0A&color=fb923c)](https://github.com/JacksonFergusonDev/focal/releases)
+[![PyPI Version](https://img.shields.io/pypi/v/focal-rs?style=flat-square&color=fb923c&labelColor=0A0A0A&logo=pypi&logoColor=fb923c)](https://pypi.org/project/focal-rs/)
 [![CI](https://img.shields.io/github/actions/workflow/status/JacksonFergusonDev/focal/ci.yml?style=flat-square&color=fb923c&labelColor=0A0A0A&label=CI)](https://github.com/JacksonFergusonDev/focal/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/actions/workflow/status/JacksonFergusonDev/focal/release.yml?style=flat-square&color=fb923c&labelColor=0A0A0A&label=release)](https://github.com/JacksonFergusonDev/focal/actions/workflows/release.yml)
-[![Python](https://img.shields.io/badge/python-3.10+-fb923c?style=flat-square&labelColor=0A0A0A)](https://www.python.org/downloads/)
-[![Ruff](https://img.shields.io/badge/style-ruff-fb923c?style=flat-square&labelColor=0A0A0A)](https://github.com/astral-sh/ruff)
-[![Mypy](https://img.shields.io/badge/mypy-checked-fb923c?style=flat-square&labelColor=0A0A0A)](https://mypy-lang.org/)
+[![Rust](https://img.shields.io/badge/rust-2024-fb923c?style=flat-square&labelColor=0A0A0A&logo=rust&logoColor=fb923c)](https://www.rust-lang.org/)
 [![prek](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge-v0.json&style=flat-square&labelColor=0A0A0A&color=fb923c)](https://github.com/j178/prek)
 [![License](https://img.shields.io/badge/license-MIT-fb923c?style=flat-square&labelColor=0A0A0A)](LICENSE)
 
@@ -33,10 +31,16 @@ Focal replaces that whole ritual with a single command. Point it at a diff, a br
 
 ## 🚀 Quick Start
 
-The fastest way to install Focal on macOS or Linux is via Homebrew:
+Focal is a single self-contained binary for macOS and Linux. Install it with Homebrew:
 
 ```bash
 brew install jacksonfergusondev/tap/focal
+```
+
+or from PyPI (the package is `focal-rs`; the command is `focal`):
+
+```bash
+uv tool install focal-rs   # or: pipx install focal-rs
 ```
 
 *See [Detailed Installation & Autocompletion](#-detailed-installation--autocompletion) below for building from source and configuring Zsh/Bash.*
@@ -243,7 +247,7 @@ from the historical release snapshot. This background is omitted by default.
 | `focal files [paths...]` | Interactively or directly extracts file and directory contents (`dir/` trailing slash syntax). |
 | `focal context [paths...]` | Generates a high-level project summary (tree, git status, manifests) with optional pre-selected files/dirs. |
 | `focal tree` | Generates and copies the repository directory tree, ignoring `.git` and build caches. |
-| `focal api` | Extracts an overview of Python classes and functions using `ripgrep`. |
+| `focal api` | Extracts an overview of Python classes and functions. |
 | `focal search` | Searches the codebase for a regex pattern and copies the results with surrounding context. |
 | `focal symbol` | Locates files containing a specific symbol and copies their full contents. |
 | `focal web` | Extracts semantic markdown from public URLs or piped HTML, stripping DOM noise. |
@@ -263,22 +267,19 @@ from the historical release snapshot. This background is omitted by default.
 
 ## 💡 How It Works
 
-Focal is built on a hybrid architecture designed to deliver sub-millisecond execution for shell operations while maintaining clean, robust Python pipelines for AST, DOM, and API processing:
+Focal is one Rust executable with no runtime dependencies. File discovery, ignore rules, search, Git, the fuzzy picker, HTML conversion, PDF and notebook extraction, and the GitHub API client all run in process, so commands start in milliseconds and behave the same on every machine.
 
-- **Zero-Overhead Bash Dispatcher (`bin/focal` & `libexec/`)**: The top-level entrypoint is a lightweight Bash router. Fast-path commands — like `focal search`, `focal files`, `focal diff`, and `focal tree` — execute directly via compiled binaries (`ripgrep`, `fd`, `fzf`), avoiding Python interpreter startup overhead.
-- **Pure Library Python Engine (`focal/`)**: Python submodules operate as pure library modules with decoupled business logic, centralized subprocess execution (`run_gh`, `run_git`), dynamic remote branch resolution, and author-only bot filtering (`focal.utils`). CLI parsing and validation are consolidated exclusively in `focal/cli.py` via `click`.
-- **Single Source of Truth for Noise & Manifests (`lib/noise.json`)**: All asset/binary extensions, multi-part extensions (`.min.js`, `.min.css`), and package manager lockfiles are maintained in a shared configuration parsed natively in Bash in `<1ms` and loaded dynamically in Python. Repository manifest discovery is unified across both runtimes.
-- **Unified Preview Pipeline (`lib/preview.sh`)**: Interactive fuzzy-finding sessions (such as `focal files` and `focal issues`) delegate to a centralized previewer with native notebook parsing, PDF extraction, issue rendering, and automatic fallbacks across `bat`, `batcat`, and `cat`.
+- **Discovery and search** use the same engines as `fd` and `ripgrep` (the `ignore` and `grep` crates), honoring `.gitignore`, `.ignore`, `.fdignore`, and `.rgignore`.
+- **Git** goes through `libgit2`, so `diff`, `wip-context`, `release-context`, and `--repo` need no `git` executable.
+- **The picker** is a built-in terminal UI with fuzzy filtering, multi-select, and a live preview that never blocks typing.
+- **GitHub commands** talk to the REST and GraphQL APIs directly. They read a token from `GH_TOKEN` or `GITHUB_TOKEN` (`GH_ENTERPRISE_TOKEN` for GitHub Enterprise hosts), falling back to `gh auth token` if you are signed in to GitHub CLI.
 
 A few principles shape the output itself:
 
-- **High signal, low noise.** Binary blobs, lockfiles, minified assets, and DOM cruft are aggressively filtered out, and token safety ceilings prevent prompt overflow, so your LLM's attention budget goes to code and text that actually matters.
-- **Clipboard-first.** Every command writes straight to your system clipboard (`pbcopy`, `wl-copy`, `xclip`, or `xsel`) — no intermediate files, no extra steps.
-- **Clear formatting.** Files, Jupyter notebooks (`.ipynb`), PDF documents, diffs, GitHub API responses, and web pages are wrapped in consistent, LLM-optimized markdown blocks without nested fence collisions, so the model isn't guessing at file paths or context boundaries.
-- **Harmonized diagnostics.** Both Bash and Python layers share identical color palettes, TTY detection (`NO_COLOR` and `TERM=dumb` compliance), and diagnostic formatting (`error`, `warning`, `info`, `done`, `hint`), gracefully handling zero-match scenarios with informative status messages.
-- **Fail loud, fail early.** Missing dependencies are caught in a pre-flight check before any context generation starts.
-
-CI enforces strict linting and type-checking across both stacks — `ruff`, `mypy`, `pytest` for Python, and `shellcheck`, `shfmt`, `bats` for shell — to keep the tool itself dependable.
+- **High signal, low noise.** Binary blobs, lockfiles, minified assets, and DOM cruft are filtered out, and token ceilings prevent prompt overflow, so your LLM's attention budget goes to code and text that matter.
+- **Clipboard-first.** With a terminal on stdout, every command copies its payload to the clipboard (natively on macOS; through `wl-copy`, `xclip`, or `xsel` on Linux). Redirect or pipe stdout and the payload goes there instead.
+- **Clear formatting.** Files, Jupyter notebooks (`.ipynb`), PDF documents, diffs, GitHub API responses, and web pages are wrapped in consistent Markdown blocks whose fences never collide with their content.
+- **Actionable diagnostics.** Errors say what failed and why (for example, that a PDF is encrypted or has no text layer) and print a hint for fixing it. Output honors `NO_COLOR` and `TERM=dumb`.
 
 ---
 
@@ -286,7 +287,7 @@ CI enforces strict linting and type-checking across both stacks — `ruff`, `myp
 
 ### Building from Source
 
-If you prefer to compile and install locally instead of using Homebrew, ensure you have the [`uv`](https://github.com/astral-sh/uv) package manager and the [`just`](https://github.com/casey/just) command runner installed on your system.
+With a [Rust toolchain](https://rustup.rs) and the [`just`](https://github.com/casey/just) command runner:
 
 ```bash
 git clone https://github.com/JacksonFergusonDev/focal.git
@@ -294,78 +295,39 @@ cd focal
 just install
 ```
 
-*Note: The `just install` pipeline resolves a localized Python environment and symlinks the entrypoint binary into `~/.local/bin`. Ensure this directory is prioritized in your system `$PATH`.*
-
-### Rust Preview
-
-Focal is being rewritten as a single Rust executable that needs none of the external tools listed under [Dependencies & Toolchain](#️-dependencies--toolchain). It implements all 13 commands and runs side by side with the installed `focal`, which stays the default until the migration completes. Building it requires a [Rust toolchain](https://rustup.rs):
-
-```bash
-just rust-install   # installs ~/.local/bin/focal-rs
-focal-rs files      # same commands and flags as focal
-```
-
-The GitHub commands read a token from `GH_TOKEN` or `GITHUB_TOKEN`, or from `gh auth token` when you are signed in to GitHub CLI. `focal-rs completions bash` and `focal-rs completions zsh` print completion scripts for the `focal` command name. See [RUST_MIGRATION.md](RUST_MIGRATION.md) for the migration plan, current status, and the intentional differences from the installed version.
-
----
+`just install` builds a release binary, installs it as `~/.local/bin/focal`, and writes Zsh completions to `~/.zsh/completions/_focal`. Make sure `~/.local/bin` is on your `PATH`. `cargo install --path .` also works and installs into `~/.cargo/bin`.
 
 ### Shell Autocompletion
 
-Focal supports native shell autocompletion for fast subcommand routing.
+`focal completions bash` and `focal completions zsh` print completion scripts for every command and flag.
 
-#### 1. Zsh
-
-**If installed via Homebrew:**
-
-Homebrew automatically links the completion scripts to its internal `site-functions` directory during installation. You only need to ensure `compinit` is initialized in your `~/.zshrc`:
+**Zsh.** `just install` writes `~/.zsh/completions/_focal`. Add that directory to your `fpath` **before** `compinit` in `~/.zshrc`:
 
 ```zsh
-autoload -Uz compinit
-compinit
-```
-
-**If installed from source (`just install`):**
-
-The `just install` command automatically symlinks the completion script to `~/.zsh/completions/_focal` and clears your active `zcompdump` cache. To activate it, ensure your `~/.zshrc` appends that directory to your `fpath` **before** loading `compinit`:
-
-```zsh
-# Add this above your compinit calls in ~/.zshrc
 fpath+=~/.zsh/completions
 
 autoload -Uz compinit
 compinit
 ```
 
-#### 2. Bash
+For any other installation, generate the file yourself: `focal completions zsh > ~/.zsh/completions/_focal`.
 
-To enable Bash completions, you need to source the included `focal.bash` script. Point directly to the completion file in your `~/.bashrc` or `~/.bash_profile`:
+**Bash.** Add this to `~/.bashrc`:
 
 ```bash
-source ~/.local/share/focal/completions/focal.bash # Adjust path if cloned elsewhere
+eval "$(focal completions bash)"
 ```
 
----
+### Optional Integrations
 
-## ⚙️ Dependencies & Toolchain
-
-Focal orchestrates several industry-standard CLI tools to achieve low-latency extraction. Homebrew will ensure these are installed on your system. While Focal will fail gracefully if one is missing, installing the following is highly recommended:
-
-- **`fzf`**: Required for interactive fuzzy-finding interfaces.
-- **`fd`**: Required for high-speed file traversal (respects `.gitignore`).
-- **`bat`**: Required for syntax-highlighted TUI previews.
-- **`rg` (ripgrep)**: Required for the `search`, `api`, and `symbol` regex extractors.
-- **`tree`**: Required for directory tree visualization in `tree`, `context`, and `--thick` diffs (v2.0+ recommended).
-- **`gh` (GitHub CLI)**: Required for `pr-diff`, `issues`, `ci-fail`, and `release-context`.
-- **`html-to-markdown`**: Required for semantic markdown extraction in `web` (install via `brew install xberg-io/tap/html-to-markdown` or `cargo install html-to-markdown-cli`).
+- **Clipboard on Linux:** `wl-copy` (Wayland) or `xclip`/`xsel` (X11). Without one, Focal explains why and prints the payload to stdout.
+- **GitHub CLI:** only used as a credential source (`gh auth token`) when no token is set in the environment.
 
 ---
 
 ## 🤝 Collaboration
 
-This repository utilizes a dual-language testing and linting architecture.
-
-- **Python:** 100% type-hinted via `mypy`, formatted with `ruff`, and tested with `pytest`. Subcommands are structured using `click`, with specialized extraction pipelines for Jupyter notebooks and PDF documents.
-- **Bash:** Strictly linted via `shellcheck`, formatted with `shfmt`, and behaviorally tested using the `bats` framework.
+Focal is written in Rust (edition 2024), formatted with `rustfmt`, and linted with Clippy (`-D warnings`). The test suite combines unit tests with CLI contract tests that run the real binary against temporary Git repositories, a local fake of the GitHub API, and a pseudo-terminal for the interactive pickers. CI runs it natively on macOS and Linux for both arm64 and x64.
 
 To run the complete local CI pipeline before submitting a pull request:
 

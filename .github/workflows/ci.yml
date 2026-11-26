@@ -3,124 +3,205 @@ name: CI
 on:
   push:
     branches: [ "main" ]
+  # Run on PRs targeting any branch so stacked PRs are checked too.
   pull_request:
-    branches: [ "main" ]
+  # Lets the release workflow run the same checks before publishing.
+  workflow_call:
 
 permissions:
   contents: read
 
+# Replace stale PR runs, and keep a separate run for each push to main.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  build:
-    name: Test on ${{ matrix.os }} / Python ${{ matrix.python-version }}
+  # All OS- and architecture-agnostic checks run on a single ARM Ubuntu runner.
+  checks:
+    name: Lint, Format & Security
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: 1.100.0
+          components: rustfmt, clippy
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: checks-aarch64-unknown-linux-gnu
+          cache-on-failure: true
+          cache-all-crates: true
+
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Lint Markdown
+        uses: rvben/rumdl@1e0f1d13c87418c31e0d59dacddd98f27a02efcc # v0.3.2
+        with:
+          version: "0.3.2"
+          report-type: annotations
+
+      - name: Validate workflows
+        uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2.2.0
+        with:
+          version: "1.7.12"
+          pyflakes: false
+
+      - name: Audit workflow security
+        uses: zizmorcore/zizmor-action@45d7276c9ca790aabd705e31ca99c6185c3e76dd # v0.8.1
+        with:
+          version: "1.32.0"
+          inputs: .github/
+          token: ${{ github.token }}
+          advanced-security: false
+          annotations: true
+
+  # Architecture-agnostic coverage check on ARM Ubuntu. The CLI contract tests run the
+  # instrumented binary, so end-to-end behaviour counts toward the floor.
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: 1.100.0
+          components: llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c # v2.90.8
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: coverage-aarch64-unknown-linux-gnu
+          cache-on-failure: true
+          cache-all-crates: true
+
+      - name: Run tests with coverage floor
+        run: cargo llvm-cov --locked --all-targets --fail-under-lines 80
+
+  # OS- and architecture-specific test matrix. Focal relies on Unix terminals and
+  # file APIs, so Windows is not a supported platform.
+  test:
+    name: Test / ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        python-version: ["3.10", "3.11", "3.12", "3.14"]
+        include:
+          - platform: macOS arm64
+            os: macos-15
+            target: aarch64-apple-darwin
+          - platform: macOS x64
+            os: macos-15-intel
+            target: x86_64-apple-darwin
+          - platform: Linux x64
+            os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - platform: Linux arm64
+            os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
 
     steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-    # 1. Linux Dependency Routing
-    - name: Install System Dependencies (Ubuntu)
-      if: runner.os == 'Linux'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y shellcheck shfmt bats fd-find tree ripgrep
-        sudo ln -sf "$(which fdfind)" /usr/local/bin/fd
+      - name: Install native Rust toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: 1.100.0-${{ matrix.target }}
 
-    # 2. macOS Dependency Routing
-    - name: Install System Dependencies (macOS)
-      if: runner.os == 'macOS'
-      run: brew install shellcheck shfmt bats-core fd tree ripgrep
+      - name: Confirm native Rust architecture
+        env:
+          EXPECTED_TARGET: ${{ matrix.target }}
+        run: |
+          rustc -vV
+          test "$(rustc -vV | awk '/^host: / {print $2}' | tr -d '\r')" = "$EXPECTED_TARGET"
 
-    - name: Install html-to-markdown
-      run: |
-        # Checksums are the published release asset digests; update them with the version.
-        if [ "${{ runner.os }}" = "Linux" ]; then
-          TARGET="x86_64-unknown-linux-musl"
-          SHA256="45c5dab86315542b6847a00d5dc1b2541f8ccd8d817d061b4c263ac75765dd4c"
-        elif [ "${{ runner.os }}" = "macOS" ]; then
-          TARGET="aarch64-apple-darwin"
-          SHA256="18d48d1473ca587e0f7726228bc51ba1a6355aab65038a58b0a3d4b0c8499940"
-        fi
-        ARCHIVE="cli-${TARGET}.tar.gz"
-        curl -fsSLo "$ARCHIVE" "https://github.com/xberg-io/html-to-markdown/releases/download/v3.12.2/${ARCHIVE}"
-        echo "${SHA256}  ${ARCHIVE}" | shasum -a 256 -c -
-        tar -xzf "$ARCHIVE"
-        sudo mv "cli-${TARGET}/html-to-markdown" /usr/local/bin/
-        sudo chmod +x /usr/local/bin/html-to-markdown
-        rm -rf "cli-${TARGET}" "$ARCHIVE"
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: test-${{ matrix.target }}
+          cache-on-failure: true
+          cache-all-crates: true
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-      with:
-        enable-cache: true
-        cache-dependency-glob: "uv.lock"
-        python-version: ${{ matrix.python-version }}
+      - name: Run unit and CLI contract tests
+        run: cargo test --locked --all-targets --no-fail-fast
 
-    - name: Install dependencies
-      run: uv sync --group ci
+  # The release build with no developer tools on PATH, the way users run it.
+  smoke:
+    name: Smoke test the release binary
+    runs-on: macos-15
+    timeout-minutes: 20
 
-    - name: Lint with Ruff
-      run: |
-        uv run ruff check .
-        uv run ruff format --check .
-
-    - name: Type check with Mypy
-      run: uv run mypy .
-
-    - name: Run tests
-      run: uv run pytest
-
-    - name: Lint shell scripts with Shellcheck
-      run: find bin libexec lib -maxdepth 1 -type f ! -name "*.json" -exec shellcheck --severity=warning {} +
-
-    - name: Run Bash tests
-      run: bats --print-output-on-failure tests/bash/
-
-    # macOS ships Bash 3.2 as /bin/bash; shadow 'bash' on PATH so bats and every
-    # '#!/usr/bin/env bash' script run under it.
-    - name: Run Bash tests under Bash 3.2
-      if: runner.os == 'macOS' && matrix.python-version == '3.14'
-      run: |
-        mkdir -p "$RUNNER_TEMP/bash32"
-        ln -sf /bin/bash "$RUNNER_TEMP/bash32/bash"
-        export PATH="$RUNNER_TEMP/bash32:$PATH"
-        bash --version | head -n 1
-        bats --print-output-on-failure tests/bash/
-
-    - name: Lint Markdown
-      uses: DavidAnson/markdownlint-cli2-action@696eb3f2509270d7b882d2aa68347bc676e7af34 # v25
-      with:
-        globs: '**/*.md'
-
-  rust-preview:
-    runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-    - run: sudo apt-get update && sudo apt-get install -y python3-pytest
-    - run: cargo fmt --check
-    - run: cargo clippy --locked --all-targets -- -D warnings
-    - run: cargo test --locked
-    - run: cargo build --locked
-    - run: FOCAL_TEST_EMPTY_PATH=1 FOCAL_TEST_BIN=target/debug/focal /usr/bin/python3 -m pytest tests/migration
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-  rust-install:
-    name: Rust install from a clean checkout
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-    - name: Check that every file carries the same version
-      run: python3 scripts/release.py --check
-    - name: Install with cargo install
-      run: cargo install --locked --path . --root "$RUNNER_TEMP/focal-install"
-    - name: Run the installed binary
-      working-directory: ${{ runner.temp }}
-      run: |
-        FOCAL="$RUNNER_TEMP/focal-install/bin/focal"
-        env -i HOME="$RUNNER_TEMP" "$FOCAL" --commands | grep -qx wip-context
-        "$FOCAL" completions bash > focal.bash
-        bash -n focal.bash
-        "$FOCAL" completions zsh | head -n 1 | grep -qx '#compdef focal'
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: 1.100.0-aarch64-apple-darwin
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: smoke-aarch64-apple-darwin
+          cache-on-failure: true
+          cache-all-crates: true
+
+      - name: Build release binary
+        run: cargo build --locked --release
+
+      - name: Check linked libraries
+        run: |
+          otool -L target/release/focal
+          if otool -L target/release/focal | grep -E '/opt/homebrew|/usr/local|libssl|libcrypto'; then
+            echo "::error::binary links a non-system library"
+            exit 1
+          fi
+
+      - name: Run commands with an empty environment
+        run: |
+          focal="$PWD/target/release/focal"
+          work="$(mktemp -d)"
+          mkdir -p "$work/project/src"
+          echo 'def main(): pass' > "$work/project/src/app.py"
+          cd "$work/project"
+          env -i HOME="$work" "$focal" --version
+          env -i HOME="$work" "$focal" --commands | grep -qx wip-context
+          env -i HOME="$work" "$focal" tree | grep -q 'app.py'
+          env -i HOME="$work" "$focal" search 'def main' | grep -q 'app.py'
+          env -i HOME="$work" "$focal" files --all | grep -q 'def main'
+          "$focal" completions bash | bash -n
+          "$focal" completions zsh | zsh -n

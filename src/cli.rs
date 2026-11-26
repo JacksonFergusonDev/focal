@@ -261,6 +261,12 @@ pub fn route(args: Vec<String>) -> io::Result<Route> {
             return Ok(Route::Print(names.join("\n") + "\n"));
         }
         None | Some("help" | "-h" | "--help") => return Ok(Route::Print(help())),
+        Some("--version" | "-V") => {
+            return Ok(Route::Print(format!(
+                "focal version {}\n",
+                env!("CARGO_PKG_VERSION")
+            )));
+        }
         Some(name)
             if name != "--"
                 && name != "completions"

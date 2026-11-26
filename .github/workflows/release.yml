@@ -1,175 +1,337 @@
 name: Release
 
-# A version tag runs two independent paths:
-# - sync-homebrew: the legacy path. The tap formula installs the Bash/Python layout from
-#   the tag's source tarball and does not use the Rust archives.
-# - build + publish: the Rust binary. Each target is built and smoke-tested on a native
-#   runner, packaged with completions, README, and license, and attached with SHA-256
-#   checksums to a *draft* GitHub release that a maintainer reviews and publishes.
-# A manual run (workflow_dispatch) builds and uploads workflow artifacts only.
-
 on:
   push:
     tags:
       - "v*.*.*"
   workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  # Oldest macOS the binaries and wheels support on both architectures.
+  MACOSX_DEPLOYMENT_TARGET: "11.0"
 
 jobs:
-  sync-homebrew:
-    name: Delegate Homebrew Update
-    if: github.event_name == 'push'
-    uses: JacksonFergusonDev/ci-cd-release-infrastructure/.github/workflows/update-homebrew-local.yml@cff447baf1076b8807502ab8da7d2f0867a973fc # main
-    with:
-      tag: ${{ github.ref_name }}
-      formula_path: "Formula/focal.rb"
-    secrets:
-      TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+  # Runs in parallel with builds; nothing publishes unless checks pass.
+  checks:
+    name: CI
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml # zizmor: ignore[self-repository]
 
-  build:
-    name: Build ${{ matrix.target }}
+  verify:
+    name: Verify version & generate notes
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # git-cliff needs the full history and tags to find this release's commits.
+          fetch-depth: 0
+
+      - name: Extract and verify version
+        id: meta
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          version="$(awk -F'"' '/^version = / { print $2; exit }' Cargo.toml)"
+          if [[ -z "$version" ]]; then
+            echo "::error::Could not read version from Cargo.toml"
+            exit 1
+          fi
+          if [[ "$EVENT_NAME" == "push" && "$REF_NAME" != "v${version}" ]]; then
+            echo "::error::Tag ${REF_NAME} does not match Cargo.toml version v${version}"
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Install uv (for git-cliff)
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: false
+
+      - name: Generate release notes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            uvx git-cliff@2.14.2 --latest --strip all --output RELEASE_NOTES.md
+          else
+            uvx git-cliff@2.14.2 --unreleased --strip all --output RELEASE_NOTES.md
+          fi
+
+      - name: Upload release notes
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-notes
+          path: RELEASE_NOTES.md
+          if-no-files-found: error
+
+  # Fan out the 4 OS x Arch native binary builds in parallel alongside CI.
+  build-binaries:
+    name: Build binary / ${{ matrix.platform }}
+    needs: verify
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
         include:
-          # macOS 11 is the oldest deployment target for both architectures.
-          - target: aarch64-apple-darwin
+          - platform: macOS arm64
             os: macos-15
-          - target: x86_64-apple-darwin
+            target: aarch64-apple-darwin
+          - platform: macOS x64
             os: macos-15-intel
-          # Building on Ubuntu 22.04 sets the glibc floor at 2.35.
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-22.04
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-22.04-arm
-    env:
-      MACOSX_DEPLOYMENT_TARGET: "11.0"
-      # git2 pulls in openssl-sys; link it statically so the archive does not depend on
-      # the runner's Homebrew OpenSSL (macOS) or libssl3 (Linux).
-      OPENSSL_STATIC: "1"
+            target: x86_64-apple-darwin
+          - platform: Linux x64
+            os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - platform: Linux arm64
+            os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+
     steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-    - name: Determine version
-      id: version
-      run: |
-        VERSION="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)"
-        if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v${VERSION}" ]; then
-          echo "::error::tag ${GITHUB_REF_NAME} does not match Cargo.toml version ${VERSION}"
-          exit 1
-        fi
-        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+      - name: Install native Rust toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: 1.100.0-${{ matrix.target }}
 
-    - name: Install build dependencies (Linux)
-      if: runner.os == 'Linux'
-      run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
+      - name: Build release binary
+        env:
+          TARGET: ${{ matrix.target }}
+        run: cargo build --release --locked --target "$TARGET"
 
-    - name: Locate OpenSSL (macOS)
-      if: runner.os == 'macOS'
-      run: echo "OPENSSL_DIR=$(brew --prefix openssl@3)" >> "$GITHUB_ENV"
-
-    - name: Install Rust
-      run: |
-        if ! command -v rustup >/dev/null 2>&1; then
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-          export PATH="$HOME/.cargo/bin:$PATH"
-        fi
-        rustup toolchain install stable --profile minimal --no-self-update
-        rustup default stable
-        rustup target add "${{ matrix.target }}"
-        rustc --version
-
-    - name: Build
-      run: cargo build --locked --release --target "${{ matrix.target }}"
-
-    - name: Inspect native dependencies
-      run: |
-        BIN="target/${{ matrix.target }}/release/focal"
-        ls -l "$BIN"
-        if [ "${{ runner.os }}" = "macOS" ]; then
-          otool -L "$BIN"
-          if otool -L "$BIN" | grep -E '/opt/homebrew|/usr/local|libssl|libcrypto'; then
-            echo "::error::binary links a non-system library"
-            exit 1
+      - name: Check linked libraries
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          bin="target/${TARGET}/release/focal"
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            otool -L "$bin"
+            if otool -L "$bin" | grep -E '/opt/homebrew|/usr/local|libssl|libcrypto'; then
+              echo "::error::binary links a non-system library"
+              exit 1
+            fi
+          else
+            ldd "$bin"
+            if ldd "$bin" | grep -E 'libssl|libcrypto'; then
+              echo "::error::binary links OpenSSL dynamically"
+              exit 1
+            fi
           fi
-          otool -l "$BIN" | grep -A4 -E 'LC_BUILD_VERSION|LC_VERSION_MIN_MACOSX'
-        else
-          ldd "$BIN"
-          if ldd "$BIN" | grep -E 'libssl|libcrypto'; then
-            echo "::error::binary links OpenSSL dynamically"
-            exit 1
+
+      - name: Smoke-check and package archive
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          bin="target/${TARGET}/release/focal"
+          "$bin" --version | grep -F "$VERSION"
+          "$bin" completions bash | bash -n
+
+          mkdir -p dist-bin
+          archive="focal-v${VERSION}-${TARGET}.tar.gz"
+          tar -czf "dist-bin/${archive}" -C "target/${TARGET}/release" focal
+
+          if command -v sha256sum >/dev/null 2>&1; then
+            (cd dist-bin && sha256sum "${archive}" > "${archive}.sha256")
+          else
+            (cd dist-bin && shasum -a 256 "${archive}" > "${archive}.sha256")
           fi
-          echo "Highest glibc symbol version:"
-          objdump -T "$BIN" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -n 1
-        fi
 
-    - name: Package
-      id: package
-      run: |
-        NAME="focal-${{ steps.version.outputs.version }}-${{ matrix.target }}"
-        BIN="target/${{ matrix.target }}/release/focal"
-        mkdir -p "dist/${NAME}/completions"
-        cp "$BIN" README.md LICENSE "dist/${NAME}/"
-        "$BIN" completions bash > "dist/${NAME}/completions/focal.bash"
-        "$BIN" completions zsh > "dist/${NAME}/completions/_focal"
-        tar -C dist -czf "dist/${NAME}.tar.gz" "${NAME}"
-        (cd dist && shasum -a 256 "${NAME}.tar.gz" > "${NAME}.tar.gz.sha256")
-        echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+      - name: Upload binary archive
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bin-${{ matrix.target }}
+          path: dist-bin/*
+          if-no-files-found: error
 
-    # Runs the packaged binary from outside the checkout, with no tools on PATH.
-    - name: Smoke test the archive
-      run: |
-        WORK="$(mktemp -d)"
-        tar -C "$WORK" -xzf "dist/${{ steps.package.outputs.name }}.tar.gz"
-        FOCAL="$WORK/${{ steps.package.outputs.name }}/focal"
-        bash -n "$WORK/${{ steps.package.outputs.name }}/completions/focal.bash"
-        if command -v zsh >/dev/null 2>&1; then
-          zsh -n "$WORK/${{ steps.package.outputs.name }}/completions/_focal"
-        fi
-        mkdir -p "$WORK/project/src"
-        echo 'def main(): pass' > "$WORK/project/src/app.py"
-        cd "$WORK/project"
-        env -i HOME="$WORK" "$FOCAL" --commands | grep -qx wip-context
-        env -i HOME="$WORK" "$FOCAL" tree | tee /dev/stderr | grep -q 'app.py'
-        env -i HOME="$WORK" "$FOCAL" search 'def main' | grep -q 'app.py'
+  # Fan out the 4 OS x Arch PyPI wheels in parallel via maturin.
+  build-wheels:
+    name: Build PyPI wheel / ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macOS arm64
+            os: macos-15
+            target: aarch64-apple-darwin
+            manylinux: off
+          - platform: macOS x64
+            os: macos-15-intel
+            target: x86_64-apple-darwin
+            manylinux: off
+          - platform: Linux x64
+            os: ubuntu-24.04
+            target: x86_64
+            manylinux: auto
+          - platform: Linux arm64
+            os: ubuntu-24.04-arm
+            target: aarch64
+            manylinux: auto
 
-    - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-      with:
-        name: ${{ steps.package.outputs.name }}
-        path: |
-          dist/${{ steps.package.outputs.name }}.tar.gz
-          dist/${{ steps.package.outputs.name }}.tar.gz.sha256
-        if-no-files-found: error
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-  publish:
-    name: Draft GitHub release
-    needs: build
+      - name: Build wheel with maturin
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist
+          manylinux: ${{ matrix.manylinux }}
+          # Vendored OpenSSL (for git2) is built with Perl modules the manylinux images
+          # do not ship by default.
+          before-script-linux: |
+            if command -v dnf >/dev/null 2>&1; then
+              dnf install -y perl-IPC-Cmd perl-core
+            elif command -v yum >/dev/null 2>&1; then
+              yum install -y perl-IPC-Cmd perl-core
+            fi
+
+      - name: Upload wheel
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wheels-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  build-sdist:
+    name: Build PyPI sdist
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build sdist with maturin
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
+        with:
+          command: sdist
+          args: --out dist
+
+      - name: Upload sdist
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wheels-sdist
+          path: dist/*
+          if-no-files-found: error
+
+  publish-pypi:
+    name: Publish wheels to PyPI
+    needs: [checks, build-wheels, build-sdist]
     if: github.event_name == 'push'
-    runs-on: ubuntu-latest
+    # pypa/gh-action-pypi-publish ships a linux/amd64-only container image.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+
+    steps:
+      - name: Download wheels and sdist
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: wheels-*
+          path: dist
+          merge-multiple: true
+
+      - name: Attest PyPI distributions
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: "dist/*"
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
+
+  github-release:
+    name: Create GitHub Release
+    needs: [verify, checks, build-binaries, publish-pypi]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
     permissions:
       contents: write
+      id-token: write
+      attestations: write
+
     steps:
-    - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-      with:
-        path: dist
-        merge-multiple: true
+      - name: Download release notes
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes
+          path: .
 
-    - name: Write checksums
-      working-directory: dist
-      run: |
-        cat ./*.tar.gz.sha256 > SHA256SUMS
-        shasum -a 256 -c SHA256SUMS
-        cat SHA256SUMS
+      - name: Download binary archives
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: bin-*
+          path: release-assets
+          merge-multiple: true
 
-    - name: Create draft release
-      env:
-        GH_TOKEN: ${{ github.token }}
-        GH_REPO: ${{ github.repository }}
-        TAG: ${{ github.ref_name }}
-      run: |
-        gh release create "$TAG" --draft --verify-tag --title "$TAG" --generate-notes \
-          dist/*.tar.gz dist/SHA256SUMS
+      - name: Attest binary archives
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: release-assets/*.tar.gz
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" release-assets/* --verify-tag --title "$TAG" --notes-file RELEASE_NOTES.md
+
+  # Delegates formula rendering and tap push to ci-cd-release-infrastructure.
+  # On a workflow_dispatch dry run it uploads dry-run-formula without pushing.
+  sync-homebrew:
+    name: Update Homebrew formula
+    needs: [verify, build-binaries, github-release]
+    if: ${{ !failure() && !cancelled() && (github.event_name != 'push' || needs.github-release.result == 'success') }}
+    permissions:
+      contents: read
+    uses: JacksonFergusonDev/ci-cd-release-infrastructure/.github/workflows/update-homebrew-binary.yml@d56f04eb8e21831fb8b0c480abf6a919f93fb9dc # main
+    with:
+      tag: v${{ needs.verify.outputs.version }}
+      formula_path: Formula/focal.rb
+      artifact_pattern: bin-*
+      archive_template: focal-v{version}-{target}.tar.gz
+      targets: aarch64-apple-darwin,x86_64-apple-darwin,aarch64-unknown-linux-gnu,x86_64-unknown-linux-gnu
+      desc: Extract token-efficient codebase context, diffs, and CI logs for LLMs
+      homepage: https://github.com/JacksonFergusonDev/focal
+      license: MIT
+      binary_name: focal
+      version_pattern: '^focal version \d+\.\d+\.\d+'
+      dry_run: ${{ github.event_name != 'push' }}
+    secrets:
+      TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
