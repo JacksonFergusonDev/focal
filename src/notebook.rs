@@ -1,4 +1,4 @@
-use crate::file::fenced;
+use crate::file::{MAX_BYTES, Outcome, fenced};
 use regex::Regex;
 use serde_json::Value;
 use std::fmt::Write;
@@ -120,12 +120,20 @@ fn render_output(output: &Value) -> Option<String> {
     }
 }
 
-pub fn render(path: &Path, file: File) -> String {
+/// Render a notebook as markdown, capped at `MAX_BYTES`. A notebook that fails to parse is
+/// reported as [`Outcome::Failed`]; one that had to be cut short as [`Outcome::Truncated`].
+pub fn render(path: &Path, file: File) -> (String, Outcome) {
     let mut text = format!("# Notebook: {}\n\n", crate::file::shown(path));
     let nb = match serde_json::from_reader::<_, Value>(BufReader::new(file)) {
         Ok(nb) if nb.is_object() => nb,
-        Ok(_) => return format!("{text}[Error parsing notebook: Invalid notebook format]\n\n"),
-        Err(err) => return format!("{text}[Error parsing notebook: {err}]\n\n"),
+        Ok(_) => {
+            let note = "[Error parsing notebook: Invalid notebook format]\n\n";
+            return (format!("{text}{note}"), Outcome::Failed);
+        }
+        Err(err) => {
+            let note = format!("[Error parsing notebook: {err}]\n\n");
+            return (format!("{text}{note}"), Outcome::Failed);
+        }
     };
     let meta = &nb["metadata"];
     let kernel = &meta["kernelspec"];
@@ -154,6 +162,7 @@ pub fn render(path: &Path, file: File) -> String {
     let total = cells.iter().filter(|c| c.is_object()).count();
     write!(text, "## Notebook Metadata\n\n- Kernel: {display}\n- Language: {lang}\n- Format: {format}\n- Cells: {total} total ({breakdown})").unwrap();
 
+    let mut boundaries = Vec::new();
     for (index, cell) in cells.iter().enumerate() {
         let source = joined(&cell["source"]);
         let source = source.trim_end();
@@ -176,6 +185,7 @@ pub fn render(path: &Path, file: File) -> String {
             }
             _ => continue,
         };
+        boundaries.push(text.len());
         write!(text, "\n\n## {heading}\n\n{}", fenced(source, language)).unwrap();
         if cell["cell_type"] == "code"
             && let Some(outputs) = cell["outputs"].as_array()
@@ -185,6 +195,27 @@ pub fn render(path: &Path, file: File) -> String {
             }
         }
     }
+    if text.len() > MAX_BYTES {
+        let total = text.len();
+        let cut = boundaries
+            .iter()
+            .rev()
+            .copied()
+            .find(|&at| at <= MAX_BYTES)
+            .unwrap_or_else(|| {
+                (0..=MAX_BYTES)
+                    .rev()
+                    .find(|&at| text.is_char_boundary(at))
+                    .unwrap_or(0)
+            });
+        text.truncate(cut);
+        write!(
+            text,
+            "\n\n...[notebook truncated: showing first {cut} of {total} bytes]\n\n"
+        )
+        .unwrap();
+        return (text, Outcome::Truncated);
+    }
     text.push_str("\n\n");
-    text
+    (text, Outcome::Text)
 }

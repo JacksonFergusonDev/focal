@@ -92,7 +92,7 @@ pub fn file(path: &Path, noise: &Noise) -> String {
     let ext = name.rsplit_once('.').map_or("", |(_, ext)| ext);
     if ext.eq_ignore_ascii_case("ipynb") {
         return match File::open(path) {
-            Ok(file) => crate::notebook::render(path, file),
+            Ok(file) => crate::notebook::render(path, file).0,
             Err(error) => format!("[cannot read {}: {error}]", path.display()),
         };
     }

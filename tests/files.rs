@@ -338,6 +338,10 @@ fn empty_and_malformed_notebooks(source: &str) {
             &result.stdout,
             b"# Notebook: invalid.ipynb\n\n[Error parsing notebook:"
         ));
+        assert!(contains(
+            &result.stderr,
+            b"failed: (no text extracted): invalid.ipynb"
+        ));
     }
 }
 
@@ -354,6 +358,31 @@ fn empty_and_malformed_notebooks_list() {
 #[test]
 fn empty_and_malformed_notebooks_truncated() {
     empty_and_malformed_notebooks("{");
+}
+
+#[test]
+fn large_notebook_is_truncated() {
+    let tmp = tempfile::tempdir().unwrap();
+    let env = base_env(tmp.path());
+    let cells: Vec<_> = (0..200)
+        .map(|n| json!({"cell_type": "code", "source": format!("print({n})\n{}", "x".repeat(2000)), "execution_count": n, "outputs": []}))
+        .collect();
+    let payload = json!({"nbformat": 4, "nbformat_minor": 5, "metadata": {}, "cells": cells});
+    write(tmp.path(), "big.ipynb", payload.to_string());
+    let result = run(tmp.path(), &env, &["big.ipynb"]);
+    assert!(result.status.success(), "{}", text(&result.stderr));
+    assert!(contains(&result.stderr, b"added: (truncated): big.ipynb"));
+    assert!(contains(&result.stderr, b"Truncated (size limit): 1 files"));
+    let stdout = text(&result.stdout);
+    assert!(stdout.contains("...[notebook truncated: showing first "));
+    assert!(stdout.len() < 101_000, "{}", stdout.len());
+    let fences = stdout
+        .lines()
+        .filter(|line| line.starts_with("```"))
+        .count();
+    assert_eq!(fences % 2, 0);
+    assert!(stdout.contains("## Code cell 1 "));
+    assert!(!stdout.contains("## Code cell 200 "));
 }
 
 /// A repository in `tmp` with staged deletions, renames, edits, and additions, unstaged
