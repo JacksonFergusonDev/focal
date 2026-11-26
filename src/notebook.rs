@@ -7,7 +7,12 @@ use std::io::BufReader;
 use std::path::Path;
 use std::sync::LazyLock;
 
-static ANSI: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\x1b\[[0-9;]*[a-zA-Z]").unwrap());
+// CSI (ECMA-48), OSC (BEL or ST terminated), nF escapes such as charset selection, and
+// remaining two-byte escapes. Link text between OSC 8 markers is left in place.
+static ANSI: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[ -/]+[0-~]|[0-~])")
+        .unwrap()
+});
 static TAG: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"<[^>]+>").unwrap());
 static HIDDEN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?is)<!--.*?-->|<style\b.*?</style\s*>|<script\b.*?</script\s*>").unwrap()
@@ -47,6 +52,42 @@ fn joined(value: &Value) -> String {
     } else {
         value.as_str().unwrap_or_default().to_owned()
     }
+}
+
+/// Emulate a terminal for carriage returns: `\r\n` is a newline, and within a line only
+/// the text after the last bare `\r` survives (whole-line overwrite, no partial overwrite).
+fn carriage_returns(text: &str) -> String {
+    text.replace("\r\n", "\n")
+        .split('\n')
+        .map(|line| {
+            line.rsplit('\r')
+                .find(|part| !part.is_empty())
+                .unwrap_or_default()
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn stream_text(text: &str) -> String {
+    carriage_returns(&ANSI.replace_all(text, ""))
+}
+
+/// Merge consecutive stream outputs with the same name into one, as nbconvert does.
+fn merged_outputs(outputs: &[Value]) -> Vec<Value> {
+    let mut merged: Vec<Value> = Vec::new();
+    for output in outputs {
+        if output["output_type"] == "stream"
+            && let Some(last) = merged.last_mut()
+            && last["output_type"] == "stream"
+            && last["name"] == output["name"]
+        {
+            let text = format!("{}{}", joined(&last["text"]), joined(&output["text"]));
+            last["text"] = Value::String(text);
+        } else {
+            merged.push(output.clone());
+        }
+    }
+    merged
 }
 
 fn nonblank(value: &Value) -> Option<&str> {
@@ -144,7 +185,7 @@ fn html_to_text(html: &str) -> String {
 fn render_output(output: &Value) -> Option<String> {
     match output["output_type"].as_str()? {
         "stream" => output_block(
-            &ANSI.replace_all(&joined(&output["text"]), ""),
+            &stream_text(&joined(&output["text"])),
             "text",
             Some(output["name"].as_str().unwrap_or("stdout")),
         ),
@@ -380,7 +421,7 @@ pub fn render(path: &Path, file: File) -> (String, Outcome) {
         if cell["cell_type"] == "code"
             && let Some(outputs) = cell["outputs"].as_array()
         {
-            for block in outputs.iter().filter_map(render_output) {
+            for block in merged_outputs(outputs).iter().filter_map(render_output) {
                 write!(text, "\n\n### Output\n\n{block}").unwrap();
             }
         }
@@ -618,5 +659,68 @@ mod tests {
             out.contains("![p](data:image/png;base64,[omitted 100 chars])"),
             "{out}"
         );
+    }
+
+    fn stream(name: &str, text: &str) -> Value {
+        json!({"output_type": "stream", "name": name, "text": text})
+    }
+
+    #[test]
+    fn strips_extended_escapes() {
+        for (input, want) in [
+            ("\x1b[?25lhi\x1b[?25h", "hi"),
+            ("\x1b[31;1mred\x1b[0m", "red"),
+            ("\x1b]8;;http://x\x07link\x1b]8;;\x07", "link"),
+            ("\x1b]8;;http://x\x1b\\link\x1b]8;;\x1b\\", "link"),
+            ("\x1b(Bplain\x1b=", "plain"),
+            ("a\x1b[2Kb", "ab"),
+        ] {
+            assert_eq!(ANSI.replace_all(input, ""), want, "{input:?}");
+        }
+    }
+
+    #[test]
+    fn carriage_returns_keep_final_state() {
+        assert_eq!(
+            carriage_returns("  0%|  |\r 33%|# |\r100%|##|\nnext\r\nend"),
+            "100%|##|\nnext\nend"
+        );
+        assert_eq!(carriage_returns("abc\r"), "abc");
+    }
+
+    #[test]
+    fn merges_consecutive_same_name_streams() {
+        let outputs = [
+            stream("stdout", "a\n"),
+            stream("stdout", "b\n"),
+            stream("stderr", "e\n"),
+            stream("stdout", "c\n"),
+        ];
+        let merged = merged_outputs(&outputs);
+        assert_eq!(merged.len(), 3);
+        assert_eq!(
+            render_output(&merged[0]).unwrap(),
+            fenced("[stdout]\na\nb", "text")
+        );
+    }
+
+    #[test]
+    fn cr_applies_after_merge_and_truncation_is_on_merged_text() {
+        let outputs = [stream("stdout", "10%\r"), stream("stdout", "100%\n")];
+        let merged = merged_outputs(&outputs);
+        assert_eq!(
+            render_output(&merged[0]).unwrap(),
+            fenced("[stdout]\n100%", "text")
+        );
+
+        let outputs = [
+            stream("stdout", &"x".repeat(3000)),
+            stream("stdout", &"y".repeat(3000)),
+        ];
+        let merged = merged_outputs(&outputs);
+        assert_eq!(merged.len(), 1);
+        let block = render_output(&merged[0]).unwrap();
+        assert!(block.contains("[output truncated]"));
+        assert!(block.contains('x') && block.contains('y'));
     }
 }
