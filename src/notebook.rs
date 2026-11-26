@@ -94,6 +94,53 @@ fn nonblank(value: &Value) -> Option<&str> {
     value.as_str().map(str::trim).filter(|s| !s.is_empty())
 }
 
+/// Collapses control characters (including newlines) to spaces so a value stays on one line.
+fn one_line(value: &str) -> String {
+    let spaced: String = value
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect();
+    spaced.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Reduces a value to a safe fence info string: its first word, restricted to `[A-Za-z0-9_+#.-]`.
+fn fence_token(value: &str) -> String {
+    let token: String = value
+        .split_whitespace()
+        .next()
+        .unwrap_or_default()
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '+' | '#' | '.' | '-'))
+        .collect();
+    if token.is_empty() {
+        "text".into()
+    } else {
+        token
+    }
+}
+
+/// Maps a raw cell's `raw_mimetype` (or legacy `format`) to a fence language.
+fn raw_language(metadata: &Value) -> String {
+    let Some(value) = nonblank(&metadata["raw_mimetype"]).or_else(|| nonblank(&metadata["format"]))
+    else {
+        return "text".into();
+    };
+    let value = value.to_lowercase();
+    let mime = value.split(';').next().unwrap_or_default().trim();
+    match mime {
+        "text/latex" | "application/x-latex" => "latex".into(),
+        "text/restructuredtext" | "text/x-rst" => "rst".into(),
+        "text/html" => "html".into(),
+        "text/markdown" => "markdown".into(),
+        "text/x-python" => "python".into(),
+        "text/asciidoc" => "asciidoc".into(),
+        _ => match mime.split_once('/') {
+            Some((_, subtype)) => fence_token(subtype.trim_start_matches("x-")),
+            None => fence_token(mime),
+        },
+    }
+}
+
 fn truncated(text: &str) -> String {
     match text.char_indices().nth(4000) {
         Some((end, _)) => format!("{}\n...[output truncated]", &text[..end]),
@@ -365,9 +412,13 @@ pub fn render(path: &Path, file: File) -> (String, Outcome) {
         .or_else(|| nonblank(&meta["language_info"]["name"]))
         .unwrap_or("python")
         .to_lowercase();
-    let display = nonblank(&kernel["display_name"])
-        .or_else(|| nonblank(&kernel["name"]))
-        .unwrap_or("Unknown");
+    let fence_lang = fence_token(&lang);
+    let lang = one_line(&lang);
+    let display = one_line(
+        nonblank(&kernel["display_name"])
+            .or_else(|| nonblank(&kernel["name"]))
+            .unwrap_or("Unknown"),
+    );
     let format = match (nb["nbformat"].as_u64(), nb["nbformat_minor"].as_u64()) {
         (Some(major), Some(minor)) => format!("nbformat {major}.{minor}"),
         (Some(major), None) => format!("nbformat {major}"),
@@ -402,22 +453,25 @@ pub fn render(path: &Path, file: File) -> (String, Outcome) {
         }
         let number = index + 1;
         let (heading, language) = match cell["cell_type"].as_str() {
-            Some("markdown") => (format!("Markdown cell {number}"), "markdown"),
+            Some("markdown") => (format!("Markdown cell {number}"), "markdown".into()),
             Some("raw") => (
                 format!("Raw cell {number}"),
-                nonblank(&cell["metadata"]["format"]).unwrap_or("text"),
+                raw_language(&cell["metadata"]),
             ),
             Some("code") => {
                 let execution = match &cell["execution_count"] {
                     Value::Null => "not executed".into(),
                     n => format!("execution: {n}"),
                 };
-                (format!("Code cell {number} [{execution}]"), lang.as_str())
+                (
+                    format!("Code cell {number} [{execution}]"),
+                    fence_lang.clone(),
+                )
             }
             _ => continue,
         };
         boundaries.push(text.len());
-        write!(text, "\n\n## {heading}\n\n{}", fenced(source, language)).unwrap();
+        write!(text, "\n\n## {heading}\n\n{}", fenced(source, &language)).unwrap();
         if cell["cell_type"] == "code"
             && let Some(outputs) = cell["outputs"].as_array()
         {
@@ -722,5 +776,56 @@ mod tests {
         let block = render_output(&merged[0]).unwrap();
         assert!(block.contains("[output truncated]"));
         assert!(block.contains('x') && block.contains('y'));
+    }
+
+    #[test]
+    fn sanitizes_inputs() {
+        assert_eq!(fence_token("py thon\n# injected"), "py");
+        assert_eq!(fence_token("c++"), "c++");
+        assert_eq!(fence_token("```\n"), "text");
+        assert_eq!(one_line("a\n# b\r\tc"), "a # b c");
+        assert_eq!(one_line("Python 3 (ipykernel)"), "Python 3 (ipykernel)");
+    }
+
+    #[test]
+    fn raw_mimetypes() {
+        let lang = |m: Value| raw_language(&m);
+        assert_eq!(lang(json!({"raw_mimetype": "text/latex"})), "latex");
+        assert_eq!(
+            lang(json!({"raw_mimetype": "text/restructuredtext"})),
+            "rst"
+        );
+        assert_eq!(lang(json!({"raw_mimetype": "text/x-rst"})), "rst");
+        assert_eq!(lang(json!({"raw_mimetype": "text/html"})), "html");
+        assert_eq!(lang(json!({"raw_mimetype": "text/markdown"})), "markdown");
+        assert_eq!(lang(json!({"raw_mimetype": "text/x-python"})), "python");
+        assert_eq!(lang(json!({"raw_mimetype": "text/asciidoc"})), "asciidoc");
+        assert_eq!(lang(json!({"raw_mimetype": "text/x-foo"})), "foo");
+        assert_eq!(lang(json!({"raw_mimetype": "text/"})), "text");
+        assert_eq!(lang(json!({"format": "latex"})), "latex");
+        assert_eq!(
+            lang(json!({"raw_mimetype": "text/html", "format": "latex"})),
+            "html"
+        );
+        assert_eq!(lang(json!({})), "text");
+    }
+
+    #[test]
+    fn injected_metadata_stays_inline() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let nb = json!({
+            "nbformat": 4,
+            "metadata": {"kernelspec": {
+                "language": "py thon\n# injected heading",
+                "display_name": "K\n## Evil"
+            }},
+            "cells": [{"cell_type": "code", "source": "x"}]
+        });
+        std::fs::write(tmp.path(), nb.to_string()).unwrap();
+        let out = render(tmp.path(), File::open(tmp.path()).unwrap()).0;
+        assert!(out.contains("- Kernel: K ## Evil\n"));
+        assert!(out.contains("- Language: py thon # injected heading\n"));
+        assert!(!out.contains("\n# injected"));
+        assert!(out.contains("```py\nx\n```"));
     }
 }
