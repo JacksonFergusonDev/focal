@@ -72,7 +72,7 @@ fn human_size(bytes: u64) -> String {
 fn metadata(path: &Path, size: u64, reason: &str) -> String {
     format!(
         "[{reason} omitted from preview]\n\nFile: {}\nType: {}\nSize: {}",
-        path.display(),
+        crate::file::shown(path),
         crate::file::describe(path),
         human_size(size)
     )
@@ -83,7 +83,7 @@ fn metadata(path: &Path, size: u64, reason: &str) -> String {
 pub fn file(path: &Path, noise: &Noise) -> String {
     let size = match fs::metadata(path) {
         Ok(meta) => meta.len(),
-        Err(error) => return format!("[cannot read {}: {error}]", path.display()),
+        Err(error) => return format!("[cannot read {}: {error}]", crate::file::shown(path)),
     };
     if size == 0 {
         return "[empty file]".into();
@@ -93,7 +93,7 @@ pub fn file(path: &Path, noise: &Noise) -> String {
     if ext.eq_ignore_ascii_case("ipynb") {
         return match File::open(path) {
             Ok(file) => crate::notebook::render(path, file).0,
-            Err(error) => format!("[cannot read {}: {error}]", path.display()),
+            Err(error) => format!("[cannot read {}: {error}]", crate::file::shown(path)),
         };
     }
     if ext.eq_ignore_ascii_case("pdf") {
@@ -102,14 +102,14 @@ pub fn file(path: &Path, noise: &Noise) -> String {
                 Ok(text) => text,
                 Err(failure) => format!("[Could not extract PDF text: {}]", failure.reason()),
             },
-            Err(error) => format!("[cannot read {}: {error}]", path.display()),
+            Err(error) => format!("[cannot read {}: {error}]", crate::file::shown(path)),
         };
     }
     if noise.matches(&name) {
         return metadata(path, size, "Asset/noise file");
     }
     let Ok(file) = File::open(path) else {
-        return format!("[cannot read {}]", path.display());
+        return format!("[cannot read {}]", crate::file::shown(path));
     };
     let mut head = Vec::new();
     if BufReader::new(file)
@@ -117,7 +117,7 @@ pub fn file(path: &Path, noise: &Noise) -> String {
         .read_to_end(&mut head)
         .is_err()
     {
-        return format!("[cannot read {}]", path.display());
+        return format!("[cannot read {}]", crate::file::shown(path));
     }
     if head[..head.len().min(8192)].contains(&0) {
         return metadata(path, size, "Binary file");

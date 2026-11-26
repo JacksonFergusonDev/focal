@@ -81,8 +81,9 @@ pub fn format(path: &Path, noise: &Noise) -> io::Result<Section> {
     let notebook = ext.eq_ignore_ascii_case("ipynb");
     let pdf = ext.eq_ignore_ascii_case("pdf");
     if size == 0 && (notebook || pdf) {
+        let kind = if notebook { "Notebook" } else { "PDF" };
         return Ok(Section {
-            markdown: "[empty file]\n\n".into(),
+            markdown: format!("# {kind}: {}\n\n[empty file]\n\n", shown(path)),
             outcome: Outcome::Empty,
         });
     }
