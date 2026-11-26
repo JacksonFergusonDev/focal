@@ -129,7 +129,7 @@ fn empty_pdf() {
     write(tmp.path(), "empty.pdf", "");
     let result = run(tmp.path(), &["empty.pdf"]);
     assert_eq!(result.status.code(), Some(0), "{}", text(&result.stderr));
-    assert!(text(&result.stdout).contains("[empty file]"));
+    assert!(text(&result.stdout).contains("# PDF: empty.pdf\n\n[empty file]\n\n"));
 }
 
 /// Runs `files <name> keep.txt` with `data` in `name`; the PDF failure must not stop the

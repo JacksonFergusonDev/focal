@@ -332,7 +332,10 @@ fn empty_and_malformed_notebooks(source: &str) {
     assert!(result.status.success(), "{}", text(&result.stderr));
     assert!(contains(&result.stdout, b"# keep.txt\n"));
     if source.is_empty() {
-        assert!(contains(&result.stdout, b"\n[empty file]\n\n"));
+        assert!(contains(
+            &result.stdout,
+            b"# Notebook: invalid.ipynb\n\n[empty file]\n\n"
+        ));
     } else {
         assert!(contains(
             &result.stdout,
