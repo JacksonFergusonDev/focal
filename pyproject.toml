@@ -3,7 +3,7 @@ requires = ["maturin>=1.8,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "focalcli"
+name = "focal-rs"
 dynamic = ["version"]
 description = "Extract clean, token-efficient codebase context, diffs, and CI logs for LLM workflows."
 readme = "README.md"
@@ -22,7 +22,7 @@ classifiers = [
 [project.urls]
 Repository = "https://github.com/JacksonFergusonDev/focal"
 Issues = "https://github.com/JacksonFergusonDev/focal/issues"
-PyPI = "https://pypi.org/project/focalcli/"
+PyPI = "https://pypi.org/project/focal-rs/"
 Author = "https://jacksonferguson.me"
 
 [tool.maturin]

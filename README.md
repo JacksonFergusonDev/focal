@@ -14,7 +14,7 @@
 
 **Stop copy-pasting your codebase into ChatGPT. One command, formatted context, straight to your clipboard.**
 
-[![PyPI Version](https://img.shields.io/pypi/v/focalcli?style=flat-square&color=fb923c&labelColor=0A0A0A&logo=pypi&logoColor=fb923c)](https://pypi.org/project/focalcli/)
+[![PyPI Version](https://img.shields.io/pypi/v/focal-rs?style=flat-square&color=fb923c&labelColor=0A0A0A&logo=pypi&logoColor=fb923c)](https://pypi.org/project/focal-rs/)
 [![CI](https://img.shields.io/github/actions/workflow/status/JacksonFergusonDev/focal/ci.yml?style=flat-square&color=fb923c&labelColor=0A0A0A&label=CI)](https://github.com/JacksonFergusonDev/focal/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/actions/workflow/status/JacksonFergusonDev/focal/release.yml?style=flat-square&color=fb923c&labelColor=0A0A0A&label=release)](https://github.com/JacksonFergusonDev/focal/actions/workflows/release.yml)
 [![Rust](https://img.shields.io/badge/rust-2024-fb923c?style=flat-square&labelColor=0A0A0A&logo=rust&logoColor=fb923c)](https://www.rust-lang.org/)
@@ -37,10 +37,10 @@ Focal is a single self-contained binary for macOS and Linux. Install it with Hom
 brew install jacksonfergusondev/tap/focal
 ```
 
-or from PyPI (the package is `focalcli`; the command is `focal`):
+or from PyPI (the package is `focal-rs`; the command is `focal`):
 
 ```bash
-uv tool install focalcli   # or: pipx install focalcli
+uv tool install focal-rs   # or: pipx install focal-rs
 ```
 
 *See [Detailed Installation & Autocompletion](#-detailed-installation--autocompletion) below for building from source and configuring Zsh/Bash.*
