@@ -22,6 +22,24 @@ static ENTITY: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"&(#[0-9]+|#[xX][0-9a-fA-F]+|[a-zA-Z]+);").unwrap());
 static REPR: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^<[\w.]+ object(?: at 0x[0-9a-fA-F]+)?>$").unwrap());
+static DATA_URI: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\bdata:([A-Za-z0-9.+-]+/[A-Za-z0-9.+-]+)((?:;[A-Za-z0-9=.+-]+)*);base64,[A-Za-z0-9+/_=-]{64,}")
+        .unwrap()
+});
+
+/// Replaces large inline base64 `data:` URIs with a short marker, keeping the
+/// surrounding markdown/HTML (alt text, tag attributes) intact.
+fn omit_data_uris(text: &str) -> String {
+    DATA_URI
+        .replace_all(text, |caps: &regex::Captures| {
+            let payload = caps[0].len() - caps[1].len() - caps[2].len() - "data:;base64,".len();
+            format!(
+                "data:{}{};base64,[omitted {payload} chars]",
+                &caps[1], &caps[2]
+            )
+        })
+        .into_owned()
+}
 
 fn joined(value: &Value) -> String {
     if let Some(lines) = value.as_array() {
@@ -174,6 +192,7 @@ fn render_output(output: &Value) -> Option<String> {
                     let body = match mime {
                         "text/html" => html_to_text(&joined(value)),
                         "application/json" => json_output(value),
+                        "text/markdown" => omit_data_uris(&joined(value)),
                         _ => joined(value),
                     };
                     if let Some(block) = output_block(&body, lang, None) {
@@ -332,7 +351,10 @@ pub fn render(path: &Path, file: File) -> (String, Outcome) {
 
     let mut boundaries = Vec::new();
     for (index, cell) in cells.iter().enumerate() {
-        let source = joined(&cell["source"]);
+        let mut source = joined(&cell["source"]);
+        if cell["cell_type"] == "markdown" {
+            source = omit_data_uris(&source);
+        }
         let source = source.trim_end();
         if source.is_empty() {
             continue;
@@ -532,5 +554,69 @@ mod tests {
             {"cell_type": "mystery", "source": "y"}
         ]});
         assert!(rendered(&nb).contains("Cells: 2 total (1 code, 0 markdown, 1 other)"));
+    }
+
+    #[test]
+    fn omits_markdown_image_payload() {
+        let payload = "A".repeat(200);
+        let out = omit_data_uris(&format!("![plot](data:image/png;base64,{payload}) after"));
+        assert_eq!(
+            out,
+            "![plot](data:image/png;base64,[omitted 200 chars]) after"
+        );
+    }
+
+    #[test]
+    fn omits_html_img_payload() {
+        let payload = "QUJD".repeat(100);
+        let out = omit_data_uris(&format!(
+            r#"<img alt="x" src="data:image/jpeg;base64,{payload}" width="5">"#
+        ));
+        assert_eq!(
+            out,
+            r#"<img alt="x" src="data:image/jpeg;base64,[omitted 400 chars]" width="5">"#
+        );
+    }
+
+    #[test]
+    fn keeps_short_uris_and_plain_text() {
+        let text = "![d](data:image/png;base64,AAAA) and https://x.y/z";
+        assert_eq!(omit_data_uris(text), text);
+    }
+
+    #[test]
+    fn render_only_touches_markdown_cells() {
+        let payload = "A".repeat(100);
+        let uri = format!("data:image/png;base64,{payload}");
+        let nb = serde_json::json!({"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[
+            {"cell_type":"markdown","source":[format!("![a]({uri})")]},
+            {"cell_type":"code","execution_count":null,"outputs":[],"source":[format!("u = '{uri}'")]},
+        ]});
+        let dir = std::env::temp_dir().join(format!("focal-nb-{}.ipynb", std::process::id()));
+        std::fs::write(&dir, nb.to_string()).unwrap();
+        let out = super::render(&dir, std::fs::File::open(&dir).unwrap()).0;
+        std::fs::remove_file(&dir).unwrap();
+        assert!(out.contains("![a](data:image/png;base64,[omitted 100 chars])"));
+        assert!(out.contains(&format!("u = '{uri}'")));
+    }
+
+    #[test]
+    fn ignores_data_inside_words() {
+        let text = format!("metadata:image/png;base64,{}", "A".repeat(100));
+        assert_eq!(omit_data_uris(&text), text);
+    }
+
+    #[test]
+    fn omits_payload_in_markdown_outputs() {
+        let uri = format!("data:image/png;base64,{}", "A".repeat(100));
+        let out = render_output(&json!({
+            "output_type": "display_data",
+            "data": {"text/markdown": format!("![p]({uri})")},
+        }))
+        .unwrap();
+        assert!(
+            out.contains("![p](data:image/png;base64,[omitted 100 chars])"),
+            "{out}"
+        );
     }
 }
