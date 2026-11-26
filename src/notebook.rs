@@ -9,6 +9,19 @@ use std::sync::LazyLock;
 
 static ANSI: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\x1b\[[0-9;]*[a-zA-Z]").unwrap());
 static TAG: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"<[^>]+>").unwrap());
+static HIDDEN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?is)<!--.*?-->|<style\b.*?</style\s*>|<script\b.*?</script\s*>").unwrap()
+});
+static BLOCK_BREAK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)<br\s*/?>|</(?:p|div|tr|li|h[1-6]|table|ul|ol|pre|blockquote)\s*>").unwrap()
+});
+static CELL_END: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)</t[dh]\s*>").unwrap());
+static PRE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?is)<pre\b.*?</pre\s*>").unwrap());
+static LEADING: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)^ +").unwrap());
+static ENTITY: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"&(#[0-9]+|#[xX][0-9a-fA-F]+|[a-zA-Z]+);").unwrap());
+static REPR: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^<[\w.]+ object(?: at 0x[0-9a-fA-F]+)?>$").unwrap());
 
 fn joined(value: &Value) -> String {
     if let Some(lines) = value.as_array() {
@@ -65,6 +78,51 @@ fn json_output(value: &Value) -> String {
     }
 }
 
+fn decode_entity(name: &str) -> Option<char> {
+    match name {
+        "lt" => Some('<'),
+        "gt" => Some('>'),
+        "amp" => Some('&'),
+        "quot" => Some('"'),
+        "apos" => Some('\''),
+        "nbsp" => Some(' '),
+        _ => {
+            let digits = name.strip_prefix('#')?;
+            let code = match digits.strip_prefix(['x', 'X']) {
+                Some(hex) => u32::from_str_radix(hex, 16).ok()?,
+                None => digits.parse().ok()?,
+            };
+            let c = char::from_u32(code)?;
+            Some(if c == '\u{a0}' { ' ' } else { c })
+        }
+    }
+}
+
+fn html_to_text(html: &str) -> String {
+    let html = HIDDEN.replace_all(html, "");
+    // Whitespace inside <pre> is significant: encode it so the collapse below keeps it.
+    let html = PRE.replace_all(&html, |caps: &regex::Captures| {
+        caps[0]
+            .replace('\n', "<br>")
+            .replace(' ', "&#32;")
+            .replace('\t', "&#9;")
+    });
+    // Elsewhere HTML whitespace is insignificant; only tags create line breaks.
+    let html = html.split_whitespace().collect::<Vec<_>>().join(" ");
+    let html = BLOCK_BREAK.replace_all(&html, "\n");
+    let html = CELL_END.replace_all(&html, "\t");
+    let text = TAG.replace_all(&html, "");
+    let text = LEADING.replace_all(&text, "");
+    let text = ENTITY.replace_all(&text, |caps: &regex::Captures| {
+        decode_entity(&caps[1]).map_or_else(|| caps[0].to_owned(), String::from)
+    });
+    text.lines()
+        .map(str::trim_end)
+        .filter(|line| !line.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn render_output(output: &Value) -> Option<String> {
     match output["output_type"].as_str()? {
         "stream" => output_block(
@@ -97,15 +155,24 @@ fn render_output(output: &Value) -> Option<String> {
             if data.keys().any(|key| key.starts_with("image/")) {
                 return Some("[image output omitted]".into());
             }
-            for (mime, lang) in [
+            let mut order = [
+                ("text/markdown", "markdown"),
                 ("text/plain", "text"),
                 ("text/html", "text"),
                 ("text/latex", "latex"),
                 ("application/json", "json"),
-            ] {
+            ];
+            // A bare object repr is a poor rendering; try richer types before it.
+            if data
+                .get("text/plain")
+                .is_some_and(|plain| REPR.is_match(joined(plain).trim()))
+            {
+                order[1..].rotate_left(1);
+            }
+            for (mime, lang) in order {
                 if let Some(value) = data.get(mime) {
                     let body = match mime {
-                        "text/html" => TAG.replace_all(&joined(value), "").into_owned(),
+                        "text/html" => html_to_text(&joined(value)),
                         "application/json" => json_output(value),
                         _ => joined(value),
                     };
@@ -218,4 +285,87 @@ pub fn render(path: &Path, file: File) -> (String, Outcome) {
     }
     text.push_str("\n\n");
     (text, Outcome::Text)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn display(data: Value) -> Option<String> {
+        render_output(&json!({"output_type": "display_data", "data": data}))
+    }
+
+    #[test]
+    fn markdown_preferred_over_plain() {
+        let out = display(json!({
+            "text/markdown": ["# Title\n", "- a"],
+            "text/plain": "<IPython.core.display.Markdown object>"
+        }));
+        assert_eq!(out.unwrap(), "```markdown\n# Title\n- a\n```");
+    }
+
+    #[test]
+    fn markdown_only_is_kept() {
+        let out = display(json!({"text/markdown": "**bold**"}));
+        assert_eq!(out.unwrap(), "```markdown\n**bold**\n```");
+    }
+
+    #[test]
+    fn plain_preferred_over_html_normally() {
+        let out = display(json!({"text/plain": "   a\n0  1", "text/html": "<table></table>"}));
+        assert_eq!(out.unwrap(), "```text\n   a\n0  1\n```");
+    }
+
+    #[test]
+    fn repr_plain_yields_to_html_and_latex() {
+        let out = display(json!({
+            "text/plain": "<IPython.core.display.HTML object>",
+            "text/html": "<b>hi</b>"
+        }));
+        assert_eq!(out.unwrap(), "```text\nhi\n```");
+        let out = display(json!({
+            "text/plain": "<IPython.core.display.Math object>",
+            "text/latex": "$x^2$"
+        }));
+        assert_eq!(out.unwrap(), "```latex\n$x^2$\n```");
+        // Without anything richer, the repr is still shown.
+        let out = display(json!({"text/plain": "<Foo object at 0x10>"}));
+        assert_eq!(out.unwrap(), "```text\n<Foo object at 0x10>\n```");
+    }
+
+    #[test]
+    fn html_drops_style_script_comments() {
+        let html = "<style>.a{color:red}</style><!-- note --><script>var x=1;</script><p>kept</p>";
+        assert_eq!(html_to_text(html), "kept");
+    }
+
+    #[test]
+    fn html_decodes_entities() {
+        assert_eq!(
+            html_to_text("a &lt; b &amp; c &quot;d&quot; &#39;e&#39; &#x41;&#66;&nbsp;x &bogus;"),
+            "a < b & c \"d\" 'e' AB x &bogus;"
+        );
+        // No double decoding.
+        assert_eq!(html_to_text("&amp;lt;"), "&lt;");
+    }
+
+    #[test]
+    fn html_block_breaks_and_cells() {
+        let html = "<h1>T</h1><div>one<br>two</div><ul><li>a</li><li>b</li></ul>\
+            <table><tr><th>x</th><th>y</th></tr><tr><td>1</td><td>2</td></tr></table>";
+        assert_eq!(html_to_text(html), "T\none\ntwo\na\nb\nx\ty\n1\t2");
+    }
+
+    #[test]
+    fn html_pre_keeps_line_breaks_and_indentation() {
+        let html = "<p>Code:</p>\n<pre class=\"x\">def f():\n    return 1 &lt; 2\n</pre>";
+        assert_eq!(html_to_text(html), "Code:\ndef f():\n    return 1 < 2");
+    }
+
+    #[test]
+    fn html_empty_leading_cell_keeps_alignment() {
+        let html = "<table><tr><td></td><td>b</td></tr></table>";
+        assert_eq!(html_to_text(html), "\tb");
+    }
 }
