@@ -1,6 +1,6 @@
 [package]
 name = "focal"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 description = "Extract clean, token-efficient codebase context, diffs, and CI logs for LLM workflows."
 readme = "README.md"
